@@ -18,6 +18,7 @@ dist-ssr
 .cursor/
 .agents/
 .claude/
+.superpowers/
 
 # Editor directories and files
 .vscode/*
