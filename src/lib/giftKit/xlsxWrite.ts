@@ -52,6 +52,12 @@ export async function buildXlsx(
     row.getCell(5).value = false;
     row.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
 
+    // The gift drive's batch id, blank for a plain gift code. This is where
+    // the operator's record of it lives; the QR carries it for the recipient.
+    row.getCell(6).value = item.batchId ?? '';
+    row.getCell(6).font = { name: 'Menlo', size: 10 };
+    row.getCell(6).alignment = { vertical: 'middle' };
+
     const imageId = wb.addImage({
       buffer: qrs[i].bytes as unknown as ArrayBuffer,
       extension: 'png',

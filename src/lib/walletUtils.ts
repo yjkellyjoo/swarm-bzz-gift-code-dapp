@@ -1,5 +1,9 @@
 import { ethers } from 'ethers';
 import { CONFIG, ERC20_ABI } from '../config';
+import { isValidPrivateKey } from './giftPayload';
+import { parseGiftDriveList } from './giftDriveList';
+
+export { isValidPrivateKey };
 
 export interface WalletInfo {
     address: string;
@@ -57,51 +61,16 @@ export function importWallet(privateKey: string): WalletInfo {
 }
 
 /**
- * Parse private keys from text input
- * Accepts comma or newline separated values
+ * Parse private keys from text input.
+ *
+ * Accepts every shape parseGiftDriveList does, discarding any batch IDs.
+ * Callers that need the batch IDs should use parseGiftDriveList directly.
+ *
+ * Does not de-duplicate: giftKit/items.ts rejects duplicates by design,
+ * because two cards carrying the same key means one gift handed out twice.
  */
 export function parsePrivateKeys(input: string): string[] {
-    if (!input.trim()) {
-        return [];
-    }
-
-    // Split by comma or newline and clean up
-    const keys = input
-        .split(/[,\n]/)
-        .map(key => key.trim())
-        .filter(key => key.length > 0);
-
-    // Validate each key
-    const validKeys: string[] = [];
-    const invalidKeys: string[] = [];
-
-    keys.forEach((key, index) => {
-        try {
-            // Check if it's a valid private key
-            new ethers.Wallet(key);
-            validKeys.push(key);
-        } catch (error) {
-            invalidKeys.push(`Key ${index + 1}: ${key.substring(0, 10)}...`);
-        }
-    });
-
-    if (invalidKeys.length > 0) {
-        throw new Error(`Invalid private keys found:\n${invalidKeys.join('\n')}`);
-    }
-
-    return validKeys;
-}
-
-/**
- * Validate private key format
- */
-export function isValidPrivateKey(privateKey: string): boolean {
-    try {
-        new ethers.Wallet(privateKey);
-        return true;
-    } catch {
-        return false;
-    }
+    return parseGiftDriveList(input).map(entry => entry.privateKey);
 }
 
 /**

@@ -1,4 +1,5 @@
 import { decodeBytes, decodeImageData } from './decode';
+import { itemPayload } from './payload';
 import { sortIntoCardOrder } from './readingOrder';
 import { readXlsx } from './xlsxRead';
 import type { GiftKitItem, QrArtifact, VerificationProblem } from './types';
@@ -34,7 +35,7 @@ export async function verifyKit(args: {
 
   for (const [i, item] of items.entries()) {
     const got = await decodeBytes(qrs[i].bytes);
-    if (got.length !== 1 || got[0] !== item.privateKey) {
+    if (got.length !== 1 || got[0] !== itemPayload(item)) {
       problems.push({
         where: `PNG ${item.num}`,
         detail: `decoded to ${got.length} code(s), not its key`,
@@ -64,6 +65,13 @@ export async function verifyKit(args: {
     if (values?.address !== item.address || values?.privateKey !== item.privateKey) {
       problems.push({ where: `xlsx row ${row}`, detail: 'address/key mismatch' });
     }
+    // An empty cell reads back as null or '', so compare normalised: the
+    // absence of a gift drive and a blank cell are the same thing.
+    const expectedDrive = item.batchId ?? '';
+    const gotDrive = values?.batchId == null ? '' : String(values.batchId);
+    if (gotDrive !== expectedDrive) {
+      problems.push({ where: `xlsx row ${row}`, detail: 'gift drive mismatch' });
+    }
     if (values?.used !== false) {
       problems.push({
         where: `xlsx row ${row}`,
@@ -75,7 +83,7 @@ export async function verifyKit(args: {
       problems.push({ where: `xlsx row ${row}`, detail: 'no embedded QR' });
     } else {
       const got = await decodeBytes(image);
-      if (got.length !== 1 || got[0] !== item.privateKey) {
+      if (got.length !== 1 || got[0] !== itemPayload(item)) {
         problems.push({ where: `xlsx row ${row}`, detail: 'embeds a QR for a different key' });
       }
     }
@@ -88,7 +96,7 @@ export async function verifyKit(args: {
     for await (const page of rasterise(pdfBytes)) {
       found.push(...sortIntoCardOrder(await decodeImageData(page)));
     }
-    const expected = items.map(i => i.privateKey);
+    const expected = items.map(itemPayload);
     if (found.join('\n') !== expected.join('\n')) {
       problems.push({
         where: 'PDF',

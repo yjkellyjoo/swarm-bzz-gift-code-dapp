@@ -8,6 +8,7 @@ import { readXlsx } from './xlsxRead';
 import type { QrArtifact } from './types';
 
 const keys = Array.from({ length: 3 }, () => ethers.Wallet.createRandom().privateKey);
+const BATCH = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
 function qrsFor(ks: string[]): QrArtifact[] {
   const version = maxQrVersion(ks);
@@ -66,5 +67,25 @@ describe('xlsx', () => {
     const { imagesByRow } = await readXlsx(bytes);
     expect(await decodeBytes(imagesByRow.get(2)!)).toEqual([keys[2]]);
     expect(await decodeBytes(imagesByRow.get(4)!)).toEqual([keys[0]]);
+  });
+
+  it('records the gift drive, and leaves it blank without one', async () => {
+    const items = buildItems(keys, new Map([[keys[0].toLowerCase(), BATCH]]));
+    const bytes = await buildXlsx(items, qrsFor(keys), 'Drives');
+    const { rowValues } = await readXlsx(bytes);
+
+    expect(rowValues[0].batchId).toBe(BATCH);
+    expect(rowValues[1].batchId ?? '').toBe('');
+    expect(rowValues[2].batchId ?? '').toBe('');
+  });
+
+  it('keeps Used a boolean in its own column once a gift drive column exists', async () => {
+    // The gift drive column is appended, so Used must not have shifted.
+    const items = buildItems(keys, new Map([[keys[0].toLowerCase(), BATCH]]));
+    const bytes = await buildXlsx(items, qrsFor(keys), 'Drives');
+    const { rowValues, hasDataValidations } = await readXlsx(bytes);
+
+    for (const row of rowValues) expect(row.used).toBe(false);
+    expect(hasDataValidations).toBe(false);
   });
 });

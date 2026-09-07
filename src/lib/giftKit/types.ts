@@ -3,6 +3,8 @@ export interface GiftKitItem {
   num: number;
   address: string;
   privateKey: string;
+  /** The postage batch this key owns - its gift drive - when it has one. */
+  batchId?: string;
 }
 
 export interface QrArtifact {
@@ -34,4 +36,11 @@ export interface KitReport {
 
 export interface GiftKitOptions {
   name: string;
+  /**
+   * Lower-cased private key to batch id, for keys that have a gift drive.
+   *
+   * Passed alongside the key list rather than replacing it, so callers that
+   * hand out plain gift codes need no change.
+   */
+  driveByKey?: ReadonlyMap<string, string>;
 }

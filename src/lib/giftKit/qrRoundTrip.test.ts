@@ -2,8 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { ethers } from 'ethers';
 import { maxQrVersion, renderQr } from './qrPng';
 import { decodeBytes } from './decode';
+import { buildItems } from './items';
+import { itemPayload } from './payload';
+import { computeCardLayout } from './layout';
+import { MM_PER_MODULE_FLOOR, mmPerModule } from './modulePitch';
 
 const keys = Array.from({ length: 8 }, () => ethers.Wallet.createRandom().privateKey);
+const BATCH = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
 describe('QR round-trip', () => {
   it('decodes each PNG back to exactly its own key', async () => {
@@ -29,6 +34,39 @@ describe('QR round-trip', () => {
     const version = maxQrVersion(keys);
     const decoded = await decodeBytes(renderQr(keys[0], version).bytes);
     expect(decoded).not.toEqual([keys[1]]);
+  });
+});
+
+describe('gift drive QR round-trip', () => {
+  const items = buildItems(keys, new Map([[keys[0].toLowerCase(), BATCH]]));
+  const payloads = items.map(itemPayload);
+
+  it('decodes a gift drive back to its key and batch', async () => {
+    const version = maxQrVersion(payloads);
+    const decoded = await decodeBytes(renderQr(payloads[0], version).bytes);
+
+    expect(decoded).toHaveLength(1);
+    expect(JSON.parse(decoded[0])).toEqual({ v: 1, pk: keys[0], batch: BATCH });
+  });
+
+  it('leaves a plain gift code as a bare key a wallet can import', async () => {
+    const version = maxQrVersion(payloads);
+    expect(await decodeBytes(renderQr(payloads[1], version).bytes)).toEqual([keys[1]]);
+  });
+
+  // Assert the printed pitch, never a module count: node-qrcode's segment
+  // optimiser mixes numeric and byte runs, so the version moves with the hex
+  // content of each key. This is the check that the longer payload has not
+  // pushed a printed card below what a phone camera can read.
+  it('still prints legibly at the kit geometry', () => {
+    const version = maxQrVersion(payloads);
+    const layout = computeCardLayout(4, 5);
+
+    for (const payload of payloads) {
+      const art = renderQr(payload, version);
+      expect(mmPerModule(layout.qrMm, art.moduleCount))
+        .toBeGreaterThanOrEqual(MM_PER_MODULE_FLOOR);
+    }
   });
 });
 

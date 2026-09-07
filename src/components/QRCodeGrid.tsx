@@ -1,12 +1,7 @@
 import { useState, useEffect } from 'react';
 import { generateQRCodeSVG } from '../lib/qrUtils';
-
-export interface GiftCode {
-  privateKey: string;
-  address: string;
-  xdaiBalance?: string;
-  xbzzBalance?: string;
-}
+import { encodeGiftPayload } from '../lib/giftPayload';
+import type { GiftCode } from '../lib/types';
 
 interface QRCodeGridProps {
   giftCodes: GiftCode[];
@@ -20,21 +15,30 @@ export function QRCodeGrid({ giftCodes, title = 'Gift Codes', className = '' }: 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Cancellation matters now that the payload depends on batchId: creating
+    // gift drives replaces giftCodes mid-flight, and if the earlier run
+    // resolved last the grid would show bare-key QRs under cards that display
+    // a batch. Before, the payload was a pure function of the key and a stale
+    // resolution was harmless.
+    let cancelled = false;
+
     const generateQRCodes = async () => {
       try {
         setIsLoading(true);
         setError(null);
-        
+
         const codes = await Promise.all(
-          giftCodes.map(code => generateQRCodeSVG(code.privateKey))
+          giftCodes.map(code => generateQRCodeSVG(encodeGiftPayload(code)))
         );
-        
+
+        if (cancelled) return;
         setQrCodes(codes);
       } catch (err) {
+        if (cancelled) return;
         setError('Failed to generate QR codes');
         console.error('Error generating QR codes:', err);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
 
@@ -44,6 +48,10 @@ export function QRCodeGrid({ giftCodes, title = 'Gift Codes', className = '' }: 
       setQrCodes([]);
       setIsLoading(false);
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [giftCodes]);
 
   if (isLoading) {
@@ -114,6 +122,26 @@ export function QRCodeGrid({ giftCodes, title = 'Gift Codes', className = '' }: 
                 </div>
               )}
             </div>
+
+            {code.batchId && (
+              <div className="mt-2 rounded border border-green-500 bg-green-50 p-2 text-xs text-green-900">
+                <div className="font-medium">Postage batch</div>
+                <code className="break-all">{code.batchId}</code>
+                <div className="mt-1 text-green-800">
+                  depth {code.batchDepth}
+                  {code.encrypted ? ' · sized for encrypted uploads' : ''}
+                  {code.immutable ? ' · immutable' : ' · mutable'}
+                  {' · erasure coding none'}
+                </div>
+              </div>
+            )}
+
+            {code.batchError && (
+              <div className="mt-2 rounded border border-red-500 bg-red-50 p-2 text-xs text-red-800">
+                <div className="font-medium">Postage batch failed</div>
+                <div className="break-words">{code.batchError}</div>
+              </div>
+            )}
           </div>
         ))}
       </div>

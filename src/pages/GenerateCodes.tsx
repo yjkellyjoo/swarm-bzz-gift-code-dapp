@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { WalletFormData } from '../components/WalletForm';
 import { generateWallets } from '../lib/walletUtils';
 import { useWalletConnection } from '../hooks/useWalletConnection';
 import { getConnectedWalletSigner } from '../lib/signerUtils';
 import { fundWalletsWithSigner, checkFundingBalanceWithSigner, validateFundParams, checkTokenAllowance } from '../lib/gnosisContract';
 import { QRCodeGrid } from '../components/QRCodeGrid';
+import { GiftDriveStep } from '../components/GiftDriveStep';
 import { GiftKitExport } from '../components/GiftKitExport';
-import type { GiftCode } from '../components/QRCodeGrid';
+import type { BatchParams, BatchResult } from '../lib/postageBatch';
+import type { GiftCode, WalletFormData } from '../lib/types';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -158,6 +159,22 @@ export function GenerateCodes() {
       if (form.walletCount < 1) throw new Error('Must generate at least 1 wallet');
       if (form.xdaiAmount < 0.01) throw new Error('xDAI amount must be at least 0.01');
 
+      // Generating replaces the whole list. Codes that already own a gift
+      // drive were paid for with real xBZZ, and once their keys are gone the
+      // batches cannot be reached again.
+      const withDrives = giftCodes.filter(code => code.batchId).length;
+      if (withDrives > 0) {
+        const proceed = window.confirm(
+          `${withDrives} gift ${withDrives === 1 ? 'drive was' : 'drives were'} bought with ` +
+          `real xBZZ and will be lost - the batches stay on-chain but nothing will be able ` +
+          `to reach them. Copy the codes first if you need them.\n\nGenerate anyway?`
+        );
+        if (!proceed) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Check balance BEFORE generating wallets
       const signer = await getConnectedWalletSigner();
       if (!signer) {
@@ -290,11 +307,71 @@ export function GenerateCodes() {
     }
   }
 
-  function handleCopyCodes() {
+  /**
+   * Fold gift drives created from this session's codes back into them, so the
+   * QR grid and the handout kit both pick them up.
+   *
+   * The settings come along because the QR grid displays them. They are
+   * deliberately not in the QR payload itself - see lib/giftPayload.
+   */
+  function handleSessionDrivesCreated(results: BatchResult[], params: BatchParams) {
+    const byAddress = new Map(results.map(r => [r.address.toLowerCase(), r]));
+
+    setGiftCodes(prev =>
+      prev.map(code => {
+        const result = byAddress.get(code.address.toLowerCase());
+        if (!result) return code;
+
+        // A failed run must not clear a drive an earlier run created: the batch
+        // still exists on-chain, and losing the id here would strand it.
+        if (!result.batchId) {
+          return { ...code, batchError: result.error };
+        }
+
+        return {
+          ...code,
+          batchId: result.batchId,
+          batchError: undefined,
+          batchDepth: params.depth,
+          batchAmount: params.amountPerChunk.toString(),
+          encrypted: params.encrypted,
+          immutable: params.immutable,
+        };
+      })
+    );
+  }
+
+  async function handleCopyCodes() {
     if (giftCodes.length === 0) return;
-    const codesText = giftCodes.map(code => code.privateKey).join('\n');
-    navigator.clipboard.writeText(codesText);
-    setSuccess('Gift codes copied to clipboard');
+
+    // Once gift drives exist a bare key list would lose the batch ID, so
+    // switch to a tab-separated table. parseGiftDriveList reads this shape
+    // back, so the export can be pasted into either later step.
+    const hasDrives = giftCodes.some(code => code.batchId);
+
+    const codesText = hasDrives
+      ? [
+          ['privateKey', 'address', 'batchId'].join('\t'),
+          ...giftCodes.map(code =>
+            [code.privateKey, code.address, code.batchId ?? ''].join('\t')
+          ),
+        ].join('\n')
+      : giftCodes.map(code => code.privateKey).join('\n');
+
+    // Awaited so a rejected write is not reported as a success. With gift
+    // drives in the list this text is the only record of batches bought with
+    // real xBZZ, and the write rejects in an insecure context or when the
+    // document is not focused.
+    try {
+      await navigator.clipboard.writeText(codesText);
+      setSuccess(
+        hasDrives
+          ? 'Gift codes copied to clipboard (private key, address, batch ID)'
+          : 'Gift codes copied to clipboard'
+      );
+    } catch {
+      setError('Could not write to the clipboard. Copy the codes from the list below.');
+    }
   }
 
   // Clean up timeout on unmount
@@ -433,6 +510,15 @@ export function GenerateCodes() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="mt-8">
+        <CardContent className="p-6">
+          <GiftDriveStep
+            giftCodes={giftCodes}
+            onSessionDrivesCreated={handleSessionDrivesCreated}
+          />
+        </CardContent>
+      </Card>
 
       <Card className="mt-8">
         <CardContent className="p-6">

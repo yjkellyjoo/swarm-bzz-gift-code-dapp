@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { buildItems } from './items';
 
 const key = () => ethers.Wallet.createRandom().privateKey;
+const BATCH = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
 describe('buildItems', () => {
   it('numbers from 1 so card #N is always sheet row N', () => {
@@ -34,5 +35,26 @@ describe('buildItems', () => {
 
   it('rejects an empty batch', () => {
     expect(() => buildItems([])).toThrow(/no keys/i);
+  });
+
+  it('leaves the gift drive unset when none is supplied', () => {
+    expect(buildItems([key()])[0].batchId).toBeUndefined();
+  });
+
+  it('attaches a gift drive to the matching key only', () => {
+    const a = key();
+    const b = key();
+    const items = buildItems([a, b], new Map([[a.toLowerCase(), BATCH]]));
+
+    expect(items[0].batchId).toBe(BATCH);
+    expect(items[1].batchId).toBeUndefined();
+  });
+
+  it('matches keys case-insensitively', () => {
+    const k = key();
+    const upper = k.toUpperCase().replace('0X', '0x');
+    const items = buildItems([upper], new Map([[k.toLowerCase(), BATCH]]));
+
+    expect(items[0].batchId).toBe(BATCH);
   });
 });

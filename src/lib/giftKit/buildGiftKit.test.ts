@@ -3,9 +3,15 @@ import { ethers } from 'ethers';
 import { unzipSync } from 'fflate';
 import { buildGiftKit } from './buildGiftKit';
 import { rasterisePagesNode } from './rasteriseNode';
+import { decodeBytes } from './decode';
 
 const keys = (n: number) =>
   Array.from({ length: n }, () => ethers.Wallet.createRandom().privateKey);
+
+const BATCHES = [
+  '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+  '0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321',
+];
 
 describe('buildGiftKit', () => {
   it('packs the QRs, the xlsx and the PDF', async () => {
@@ -77,6 +83,27 @@ describe('buildGiftKit', () => {
     const k = keys(1)[0];
     await expect(buildGiftKit([k, k], { name: 'Batch A' })).rejects.toThrow(/duplicate/i);
   });
+
+  it('encodes gift drives into the packed QRs, and verifies them', async () => {
+    const ks = keys(3);
+    const drives = new Map(ks.slice(0, 2).map((k, i) => [k.toLowerCase(), BATCHES[i]]));
+
+    const { zipBytes, report } = await buildGiftKit(ks, { name: 'Drives', driveByKey: drives });
+    expect(report.count).toBe(3);
+
+    const entries = unzipSync(zipBytes);
+    const qrNames = Object.keys(entries).filter(n => n.startsWith('qr/')).sort();
+
+    // The two with a drive carry key and batch; the third stays a bare key so
+    // a wallet can still scan and import it directly.
+    const decoded = await Promise.all(qrNames.map(n => decodeBytes(entries[n])));
+    const texts = decoded.map(d => d[0]);
+
+    const structured = texts.filter(t => t.startsWith('{')).map(t => JSON.parse(t));
+    expect(structured).toHaveLength(2);
+    expect(structured.map(s => s.batch).sort()).toEqual([...BATCHES].sort());
+    expect(texts.filter(t => !t.startsWith('{'))).toEqual([ks[2]]);
+  }, 60_000);
 
   it('builds and fully verifies a kit including the PDF pass', async () => {
     // The whole pipeline with nothing stubbed out: every QR decoded back from
