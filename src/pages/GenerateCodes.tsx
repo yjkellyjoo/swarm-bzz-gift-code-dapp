@@ -8,6 +8,7 @@ import { GiftDriveStep } from '../components/GiftDriveStep';
 import { GiftKitExport } from '../components/GiftKitExport';
 import type { BatchParams, BatchResult } from '../lib/postageBatch';
 import type { GiftCode, WalletFormData } from '../lib/types';
+import { DEFAULT_BATCH_NAME } from '../lib/batchName';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ function getDefaultFormData(): WalletFormData {
     xdaiAmount: CONFIG.DEFAULT_XDAI_AMOUNT,
     xbzzAmount: CONFIG.DEFAULT_XBZZ_AMOUNT,
     walletCount: CONFIG.DEFAULT_WALLET_COUNT,
+    batchName: DEFAULT_BATCH_NAME,
   };
 }
 
@@ -47,6 +49,10 @@ function loadFormFromStorage(): WalletFormData {
         typeof parsed.walletCount === 'number'
           ? parsed.walletCount
           : defaults.walletCount,
+      batchName:
+        typeof parsed.batchName === 'string'
+          ? parsed.batchName
+          : defaults.batchName,
     };
   } catch {
     return defaults;
@@ -390,6 +396,22 @@ export function GenerateCodes() {
     <div className="space-y-8">
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
+          <Label htmlFor="batchName">Batch name</Label>
+          <Input
+            id="batchName"
+            name="batchName"
+            type="text"
+            value={form.batchName}
+            onChange={handleChange}
+            disabled={isLoading}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Names the downloads and the handout kit files.
+          </p>
+        </div>
+
+        <div className="space-y-2">
           <Label htmlFor="walletCount">Number of QR codes (gift wallets) to generate</Label>
           <Input
             id="walletCount"
@@ -515,6 +537,7 @@ export function GenerateCodes() {
         <CardContent className="p-6">
           <GiftDriveStep
             giftCodes={giftCodes}
+            batchName={form.batchName}
             onSessionDrivesCreated={handleSessionDrivesCreated}
           />
         </CardContent>
@@ -522,7 +545,7 @@ export function GenerateCodes() {
 
       <Card className="mt-8">
         <CardContent className="p-6">
-          <GiftKitExport giftCodes={giftCodes} />
+          <GiftKitExport giftCodes={giftCodes} batchName={form.batchName} />
         </CardContent>
       </Card>
     </div>

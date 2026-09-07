@@ -44,6 +44,7 @@ interface GiftDriveSettings {
 
 interface GiftDriveStepProps {
   giftCodes: GiftCode[];
+  batchName: string;
   onSessionDrivesCreated: (results: BatchResult[], params: BatchParams) => void;
 }
 
