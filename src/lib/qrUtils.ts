@@ -1,4 +1,15 @@
 import QRCode from 'qrcode';
+import { encodeGiftPayload } from './giftPayload';
+import type { GiftCode } from './types';
+
+/** Escape values interpolated into the printable QR sheet. */
+function escapeHtml(value: string): string {
+    return value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 
 /**
  * Generate QR code as SVG string
@@ -36,11 +47,22 @@ export async function generateMultipleQRCodes(
  * Create QR code grid HTML for printing
  */
 export async function createQRCodeGridHTML(
-    giftCodes: Array<{ privateKey: string; address: string }>,
+    giftCodes: GiftCode[],
 ): Promise<string> {
     const qrCodes = await generateMultipleQRCodes(
-        giftCodes.map(code => code.privateKey)
+        giftCodes.map(code => encodeGiftPayload(code))
     );
+
+    // The batch ID is printed alongside the QR as well as encoded inside it, so
+    // a card stays readable without a scanner.
+    const cards = giftCodes.map((code, index) => {
+        const batchLine = code.batchId
+            ? `<div class="batch">Batch: ${escapeHtml(code.batchId)}</div>`
+            : '';
+
+        return `<span class="img">${qrCodes[index]}${batchLine}</span>
+        `;
+    }).join('');
 
     const gridHTML = `
 <!DOCTYPE html>
@@ -48,13 +70,13 @@ export async function createQRCodeGridHTML(
 <head>
     <title>Swarm BZZ Gift Code Dapp - QR Codes</title>
     <style>
-        svg {width: 20%; height: auto;}
-        .img {width:20%; height:auto;margin:1%}
+        svg {width: 100%; height: auto;}
+        .img {display:inline-block;width:20%; height:auto;margin:1%;vertical-align:top}
+        .batch {font-family: monospace; font-size: 7px; word-break: break-all; text-align: center}
     </style>
 </head>
 <body>
-    ${giftCodes.map((_code, index) => `<span class="img">${qrCodes[index]}</span>
-        `).join('')}
+    ${cards}
 </body>
 </html>`;
 
@@ -64,7 +86,7 @@ export async function createQRCodeGridHTML(
 /**
  * Open QR code grid in new window
  */
-export function openQRCodeGrid(giftCodes: Array<{ privateKey: string; address: string }>): void {
+export function openQRCodeGrid(giftCodes: GiftCode[]): void {
     createQRCodeGridHTML(giftCodes).then(html => {
         const newWindow = window.open('', '_blank');
         if (newWindow) {
@@ -81,7 +103,7 @@ export function openQRCodeGrid(giftCodes: Array<{ privateKey: string; address: s
  * Download QR code grid as HTML file
  */
 export function downloadQRCodeGrid(
-    giftCodes: Array<{ privateKey: string; address: string }>,
+    giftCodes: GiftCode[],
     filename: string = 'gift-codes.html'
 ): void {
     createQRCodeGridHTML(giftCodes).then(html => {

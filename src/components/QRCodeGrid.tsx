@@ -1,12 +1,7 @@
 import { useState, useEffect } from 'react';
 import { generateQRCodeSVG } from '../lib/qrUtils';
-
-export interface GiftCode {
-  privateKey: string;
-  address: string;
-  xdaiBalance?: string;
-  xbzzBalance?: string;
-}
+import { encodeGiftPayload } from '../lib/giftPayload';
+import type { GiftCode } from '../lib/types';
 
 interface QRCodeGridProps {
   giftCodes: GiftCode[];
@@ -26,7 +21,7 @@ export function QRCodeGrid({ giftCodes, title = 'Gift Codes', className = '' }: 
         setError(null);
         
         const codes = await Promise.all(
-          giftCodes.map(code => generateQRCodeSVG(code.privateKey))
+          giftCodes.map(code => generateQRCodeSVG(encodeGiftPayload(code)))
         );
         
         setQrCodes(codes);
@@ -114,6 +109,26 @@ export function QRCodeGrid({ giftCodes, title = 'Gift Codes', className = '' }: 
                 </div>
               )}
             </div>
+
+            {code.batchId && (
+              <div className="mt-2 rounded border border-green-500 bg-green-50 p-2 text-xs text-green-900">
+                <div className="font-medium">Postage batch</div>
+                <code className="break-all">{code.batchId}</code>
+                <div className="mt-1 text-green-800">
+                  depth {code.batchDepth}
+                  {code.encrypted ? ' · sized for encrypted uploads' : ''}
+                  {code.immutable ? ' · immutable' : ' · mutable'}
+                  {' · erasure coding none'}
+                </div>
+              </div>
+            )}
+
+            {code.batchError && (
+              <div className="mt-2 rounded border border-red-500 bg-red-50 p-2 text-xs text-red-800">
+                <div className="font-medium">Postage batch failed</div>
+                <div className="break-words">{code.batchError}</div>
+              </div>
+            )}
           </div>
         ))}
       </div>
