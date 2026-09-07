@@ -24,6 +24,9 @@ const CHUNK_SIZE_BYTES = 4096;
 /** bee-js caps utilisation at 90% for depths outside the measured table. */
 const MAX_UTILIZATION = 0.9;
 
+/** Wallets read per round in the preflight, to stay under RPC rate limits. */
+const PREFLIGHT_CHUNK_SIZE = 20;
+
 export interface BatchParams {
     depth: number;
     /** Per-chunk amount in PLUR. */
@@ -165,6 +168,17 @@ export function validateBatchParams(
             );
         }
 
+        // We always stamp with a fixed bucket depth, and the contract requires
+        // it to be at least its own minimum. If that minimum ever rises above
+        // ours, every createBatch reverts with nothing readable to explain it.
+        if (CONFIG.POSTAGE_BUCKET_DEPTH < limits.minimumBucketDepth) {
+            errors.push(
+                `This app creates batches at bucket depth ${CONFIG.POSTAGE_BUCKET_DEPTH}, but the ` +
+                `contract now requires at least ${limits.minimumBucketDepth}. Gift drives cannot ` +
+                `be created until the app is updated.`
+            );
+        }
+
         if (
             params.amountPerChunk > 0n &&
             params.amountPerChunk < limits.minimumInitialBalancePerChunk
@@ -265,6 +279,29 @@ export async function createBatchForWallet(
 
     const result: BatchResult = { address, privateKey };
 
+    try {
+        await runBatchCreation(result, wallet, provider, params);
+    } catch (err) {
+        // Never throw past this point. If createBatch was submitted and only
+        // the confirmation failed, the wallet's xBZZ is already spent and
+        // result.createTxHash is the only pointer to it - losing that to a
+        // freshly-built error object would strand the batch.
+        result.error = err instanceof Error ? err.message : 'Failed to create the gift drive';
+    } finally {
+        provider.destroy();
+    }
+
+    return result;
+}
+
+/** The work of createBatchForWallet, so its caller can own error handling. */
+async function runBatchCreation(
+    result: BatchResult,
+    wallet: ethers.Wallet,
+    provider: ethers.JsonRpcProvider,
+    params: BatchParams
+): Promise<void> {
+    const address = result.address;
     const totalCost = getBatchCostPlur(params.depth, params.amountPerChunk);
     const bzz = new ethers.Contract(CONFIG.XBZZ_TOKEN_ADDRESS, ERC20_ABI, wallet);
 
@@ -324,8 +361,6 @@ export async function createBatchForWallet(
 
     result.batchId = extractBatchId(receipt, address, nonce);
     console.log(`✅ ${address}: batch ${result.batchId}`);
-
-    return result;
 }
 
 /**
@@ -347,8 +382,14 @@ export async function createBatchesForWallets(
         onProgress?.({ current: i + 1, total: codes.length, processing: code.address });
 
         try {
-            results.push(await createBatchForWallet(code.privateKey, params, rpcUrl));
+            // createBatchForWallet reports expected failures in the result
+            // rather than throwing, so any transaction hash it did get survives.
+            const result = await createBatchForWallet(code.privateKey, params, rpcUrl);
+            if (result.error) console.error(`❌ ${code.address}: ${result.error}`);
+            results.push(result);
         } catch (err) {
+            // Only reached if the key itself is unusable, before there is any
+            // result to fill in.
             const message = err instanceof Error ? err.message : 'Failed to create batch';
             console.error(`❌ ${code.address}: ${message}`);
             results.push({
@@ -390,35 +431,83 @@ export async function preflightBatchWallets(
     rpcUrl: string
 ): Promise<WalletAffordability[]> {
     const provider = new ethers.JsonRpcProvider(rpcUrl, CONFIG.CHAIN_ID);
-    const bzz = new ethers.Contract(CONFIG.XBZZ_TOKEN_ADDRESS, ERC20_ABI, provider);
-    const costPlur = getBatchCostPlur(params.depth, params.amountPerChunk);
 
-    return Promise.all(
-        entries.map(async entry => {
-            const address = new ethers.Wallet(entry.privateKey).address;
-            const [bzzBalance, nativeBalance] = await Promise.all([
-                bzz.balanceOf(address) as Promise<bigint>,
-                provider.getBalance(address),
-            ]);
+    try {
+        const bzz = new ethers.Contract(CONFIG.XBZZ_TOKEN_ADDRESS, ERC20_ABI, provider);
+        const costPlur = getBatchCostPlur(params.depth, params.amountPerChunk);
 
-            let reason: string | undefined;
-            if (bzzBalance < costPlur) {
-                reason = `holds ${formatBzz(bzzBalance)} xBZZ, needs ${formatBzz(costPlur)} xBZZ`;
-            } else if (nativeBalance === 0n) {
-                reason = 'has no xDAI for gas';
-            }
+        // Gas for two transactions, approve then createBatch. Checking only for
+        // a non-zero balance would pass a wallet holding a single wei, which
+        // then fails mid-run - the exact outcome this preflight exists to avoid.
+        const feeData = await provider.getFeeData();
+        const pricePerGas =
+            feeData.maxFeePerGas ?? feeData.gasPrice ?? BigInt(CONFIG.GAS_PRICE);
+        const gasNeeded = pricePerGas * BigInt(CONFIG.GAS_LIMIT) * 2n;
 
-            return {
-                address,
-                privateKey: entry.privateKey,
-                bzzBalance,
-                nativeBalance,
-                costPlur,
-                canAfford: reason === undefined,
-                reason,
-            };
-        })
-    );
+        const rows: WalletAffordability[] = [];
+
+        // Chunked rather than one Promise.all over every wallet: a 300-key run
+        // would otherwise open 600 concurrent requests, and a public RPC
+        // answers that with rate limiting.
+        for (let i = 0; i < entries.length; i += PREFLIGHT_CHUNK_SIZE) {
+            const chunk = entries.slice(i, i + PREFLIGHT_CHUNK_SIZE);
+
+            const settled = await Promise.allSettled(
+                chunk.map(async entry => {
+                    const address = new ethers.Wallet(entry.privateKey).address;
+                    const [bzzBalance, nativeBalance] = await Promise.all([
+                        bzz.balanceOf(address) as Promise<bigint>,
+                        provider.getBalance(address),
+                    ]);
+                    return { address, bzzBalance, nativeBalance };
+                })
+            );
+
+            settled.forEach((outcome, j) => {
+                const entry = chunk[j];
+
+                // One failed read blocks one wallet rather than discarding the
+                // whole preflight.
+                if (outcome.status === 'rejected') {
+                    rows.push({
+                        address: new ethers.Wallet(entry.privateKey).address,
+                        privateKey: entry.privateKey,
+                        bzzBalance: 0n,
+                        nativeBalance: 0n,
+                        costPlur,
+                        canAfford: false,
+                        reason: 'could not be read from the chain',
+                    });
+                    return;
+                }
+
+                const { address, bzzBalance, nativeBalance } = outcome.value;
+
+                let reason: string | undefined;
+                if (bzzBalance < costPlur) {
+                    reason = `holds ${formatBzz(bzzBalance)} xBZZ, needs ${formatBzz(costPlur)} xBZZ`;
+                } else if (nativeBalance < gasNeeded) {
+                    reason =
+                        `has ${ethers.formatEther(nativeBalance)} xDAI, needs about ` +
+                        `${ethers.formatEther(gasNeeded)} for two transactions`;
+                }
+
+                rows.push({
+                    address,
+                    privateKey: entry.privateKey,
+                    bzzBalance,
+                    nativeBalance,
+                    costPlur,
+                    canAfford: reason === undefined,
+                    reason,
+                });
+            });
+        }
+
+        return rows;
+    } finally {
+        provider.destroy();
+    }
 }
 
 /** Reduce a preflight to what the UI needs to decide whether to offer the run. */

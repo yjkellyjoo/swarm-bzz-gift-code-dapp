@@ -147,7 +147,16 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
   // Parsing the textarea can throw; the step must still render.
   const parsed = useMemo<{ entries: GiftDriveEntry[]; error: string | null }>(() => {
     if (source === 'session') {
-      return { entries: giftCodes.map(c => ({ privateKey: c.privateKey })), error: null };
+      // Codes that already own a drive are excluded, not just carried through.
+      // Re-running after a partial failure is the natural recovery move, and
+      // without this it buys a second batch for every wallet that succeeded -
+      // paying twice and orphaning the first.
+      return {
+        entries: giftCodes
+          .filter(c => !c.batchId)
+          .map(c => ({ privateKey: c.privateKey })),
+        error: null,
+      };
     }
     if (!pasted.trim()) return { entries: [], error: null };
     try {
@@ -166,6 +175,20 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
 
   const readout = useMemo(() => {
     if (!params) return null;
+
+    // Runs during render, before anything gates on settingsErrors, so it has
+    // to tolerate whatever is currently in the depth field. getBatchCostPlur
+    // does 2n ** BigInt(depth): a half-typed "17.5" would throw RangeError and
+    // take the page down, and a huge depth would hang the tab on the
+    // exponentiation. validateBatchParams reports why the readout is missing.
+    if (
+      !Number.isInteger(params.depth) ||
+      params.depth < CONFIG.MIN_BATCH_DEPTH ||
+      params.depth > CONFIG.MAX_BATCH_DEPTH
+    ) {
+      return null;
+    }
+
     const costPlur = getBatchCostPlur(params.depth, params.amountPerChunk);
     return {
       costPlur,
@@ -501,8 +524,10 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
             </Button>
           </div>
           <div className="divide-y rounded border border-slate-200">
-            {results.map(result => (
-              <div key={result.address} className="space-y-1 p-2 text-xs">
+            {/* Index in the key: a pasted list may repeat a wallet, since
+                parseGiftDriveList deliberately does not deduplicate. */}
+            {results.map((result, i) => (
+              <div key={`${result.address}-${i}`} className="space-y-1 p-2 text-xs">
                 <div className="font-mono">{result.address}</div>
                 {result.batchId && (
                   <div className="break-all font-mono text-green-800">{result.batchId}</div>

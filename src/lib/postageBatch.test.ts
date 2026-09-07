@@ -31,6 +31,14 @@ function params(overrides: Partial<BatchParams> = {}): BatchParams {
 }
 
 describe('getBatchCostPlur', () => {
+    // 2n ** BigInt(depth) throws on a fractional depth, and the depth field is
+    // a number input an operator can type "17.5" into. Callers that run during
+    // render must gate on Number.isInteger before reaching this - see the
+    // readout memo in GiftDriveStep.
+    it('throws on a non-integer depth, so callers must gate first', () => {
+        expect(() => getBatchCostPlur(17.5, 1000n)).toThrow();
+    });
+
     it('multiplies the per-chunk amount by the chunk count', () => {
         expect(getBatchCostPlur(17, 414720000n)).toBe(414720000n * 131072n);
     });
@@ -185,6 +193,18 @@ describe('validateBatchParams', () => {
         const highBucket: ChainBatchLimits = { ...limits, minimumBucketDepth: 20 };
         const errors = validateBatchParams(params({ depth: 18 }), highBucket);
         expect(errors.join(' ')).toMatch(/minimum bucket depth \(20\)/);
+    });
+
+    // We stamp with a fixed bucket depth. If the contract's minimum ever rises
+    // above it, every createBatch reverts with nothing readable to explain it.
+    it('rejects when the contract outgrows our fixed bucket depth', () => {
+        const raised: ChainBatchLimits = {
+            ...limits,
+            minimumBucketDepth: CONFIG.POSTAGE_BUCKET_DEPTH + 1,
+        };
+        const errors = validateBatchParams(params({ depth: 30 }), raised);
+
+        expect(errors.join(' ')).toMatch(/until the app is updated/);
     });
 
     it('still checks static rules with no chain limits available', () => {

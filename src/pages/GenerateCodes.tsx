@@ -306,14 +306,20 @@ export function GenerateCodes() {
         const result = byAddress.get(code.address.toLowerCase());
         if (!result) return code;
 
+        // A failed run must not clear a drive an earlier run created: the batch
+        // still exists on-chain, and losing the id here would strand it.
+        if (!result.batchId) {
+          return { ...code, batchError: result.error };
+        }
+
         return {
           ...code,
           batchId: result.batchId,
-          batchError: result.error,
-          batchDepth: result.batchId ? params.depth : undefined,
-          batchAmount: result.batchId ? params.amountPerChunk.toString() : undefined,
-          encrypted: result.batchId ? params.encrypted : undefined,
-          immutable: result.batchId ? params.immutable : undefined,
+          batchError: undefined,
+          batchDepth: params.depth,
+          batchAmount: params.amountPerChunk.toString(),
+          encrypted: params.encrypted,
+          immutable: params.immutable,
         };
       })
     );
