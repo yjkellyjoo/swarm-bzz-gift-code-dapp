@@ -5,20 +5,16 @@
 // removed).
 
 /**
- * Operator-supplied settings for the Generate Codes flow.
+ * Operator-supplied settings for generating and funding gift codes.
  *
- * The `batch*` fields describe the postage batch each gift wallet will buy for
- * itself. `batchAmount` is the per-chunk amount in PLUR, kept as a string
- * because it routinely exceeds `Number.MAX_SAFE_INTEGER`.
+ * Gift drive settings live with the gift drive step, not here - that step runs
+ * on a pasted key list as readily as on this session's codes, so its settings
+ * are not part of the generate form.
  */
 export interface WalletFormData {
   xdaiAmount: number;
   xbzzAmount: number;
   walletCount: number;
-  batchDepth: number;
-  batchAmount: string;
-  batchEncrypted: boolean;
-  batchImmutable: boolean;
 }
 
 /**
