@@ -30,24 +30,22 @@ describe('encodeGiftPayload', () => {
         expect(encodeGiftPayload(code())).toBe(PRIVATE_KEY);
     });
 
-    it('returns compact JSON once a batch exists', () => {
+    it('encodes only version, key and batch', () => {
         const payload = encodeGiftPayload(
             code({ batchId: BATCH_ID, batchDepth: 20, encrypted: true, immutable: false })
         );
 
-        expect(JSON.parse(payload)).toEqual({
-            v: 1,
-            pk: PRIVATE_KEY,
-            batch: BATCH_ID,
-            depth: 20,
-            enc: true,
-            imm: false,
-        });
+        // depth/enc/imm are deliberately absent: they cost two QR versions,
+        // which is the difference between a card that scans off print and one
+        // that does not. They live in the xlsx instead.
+        expect(JSON.parse(payload)).toEqual({ v: 1, pk: PRIVATE_KEY, batch: BATCH_ID });
     });
 
-    it('omits fields that are not set', () => {
-        const parsed = JSON.parse(encodeGiftPayload(code({ batchId: BATCH_ID })));
-        expect(parsed).toEqual({ v: 1, pk: PRIVATE_KEY, batch: BATCH_ID });
+    it('stays inside the QR budget that keeps a printed card scannable', () => {
+        const payload = encodeGiftPayload(
+            code({ batchId: BATCH_ID, batchDepth: 20, encrypted: true, immutable: false })
+        );
+        expect(payload.length).toBeLessThanOrEqual(160);
     });
 });
 
@@ -60,20 +58,26 @@ describe('decodeGiftPayload', () => {
         expect(decodeGiftPayload(`  ${PRIVATE_KEY}\n`)).toEqual({ privateKey: PRIVATE_KEY });
     });
 
-    it('round-trips a structured payload', () => {
-        const original = code({
-            batchId: BATCH_ID,
-            batchDepth: 20,
-            encrypted: true,
-            immutable: true,
-        });
+    it('round-trips the key and batch', () => {
+        const original = code({ batchId: BATCH_ID, batchDepth: 20, encrypted: true });
 
         expect(decodeGiftPayload(encodeGiftPayload(original))).toEqual({
             privateKey: PRIVATE_KEY,
             batchId: BATCH_ID,
+        });
+    });
+
+    it('still reads a payload that carries the older extra fields', () => {
+        const legacy = JSON.stringify({
+            v: 1, pk: PRIVATE_KEY, batch: BATCH_ID, depth: 20, enc: true, imm: false,
+        });
+
+        expect(decodeGiftPayload(legacy)).toEqual({
+            privateKey: PRIVATE_KEY,
+            batchId: BATCH_ID,
             batchDepth: 20,
             encrypted: true,
-            immutable: true,
+            immutable: false,
         });
     });
 
@@ -111,7 +115,7 @@ describe('decodeGiftPayload', () => {
 });
 
 describe('QR encoding of a payload', () => {
-    // The structured payload is roughly 3x the length of a bare key, so it is
+    // The structured payload is over twice the length of a bare key, so it is
     // worth proving it still fits in a QR code and survives a round trip.
     const full = code({
         batchId: BATCH_ID,
@@ -121,7 +125,7 @@ describe('QR encoding of a payload', () => {
     });
 
     it('stays a reasonable size', () => {
-        expect(encodeGiftPayload(full).length).toBeLessThan(250);
+        expect(encodeGiftPayload(full).length).toBeLessThanOrEqual(160);
     });
 
     it('encodes as an SVG QR code', async () => {
@@ -135,13 +139,10 @@ describe('QR encoding of a payload', () => {
         expect(svg).toContain('<svg');
     });
 
-    it('decodes back to the same values it was built from', () => {
+    it('decodes back to the key and batch it was built from', () => {
         expect(decodeGiftPayload(encodeGiftPayload(full))).toEqual({
             privateKey: PRIVATE_KEY,
             batchId: BATCH_ID,
-            batchDepth: 20,
-            encrypted: true,
-            immutable: false,
         });
     });
 });

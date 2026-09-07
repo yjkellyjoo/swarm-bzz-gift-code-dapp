@@ -14,6 +14,10 @@ import type { GiftCode } from './types';
 
 export const GIFT_PAYLOAD_VERSION = 1;
 
+/**
+ * The encoder only ever writes v/pk/batch. The three optional fields exist so
+ * the decoder still reads a payload produced before they were dropped.
+ */
 interface StructuredGiftPayload {
     v: number;
     pk: string;
@@ -62,15 +66,18 @@ export function encodeGiftPayload(code: GiftCode): string {
         return code.privateKey;
     }
 
+    // Only the version, key and batch.
+    //
+    // Every extra field costs QR modules, and at 20 cards to an A4 page the
+    // printed module pitch is the binding constraint: the six-field form needs
+    // QR version 10 (0.62 mm per module, a hair over the 0.6 mm floor phone
+    // cameras need off print), where this needs version 8 (0.72 mm). depth,
+    // encryption and immutability live in the handout kit's spreadsheet.
     const payload: StructuredGiftPayload = {
         v: GIFT_PAYLOAD_VERSION,
         pk: code.privateKey,
         batch: code.batchId,
     };
-
-    if (typeof code.batchDepth === 'number') payload.depth = code.batchDepth;
-    if (typeof code.encrypted === 'boolean') payload.enc = code.encrypted;
-    if (typeof code.immutable === 'boolean') payload.imm = code.immutable;
 
     return JSON.stringify(payload);
 }
