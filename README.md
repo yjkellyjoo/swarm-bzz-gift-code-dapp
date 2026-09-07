@@ -8,8 +8,8 @@ A React + TypeScript application for generating and managing [Swarm](https://www
 - **Wallet Generation**: Create multiple new wallets with private keys
 - **Custom RPC URL**: Input custom Gnosis RPC endpoint
 - **Token Funding**: Fund wallets with xDAI and xBZZ tokens
-- **QR Code Generation**: Generate printable QR codes for gift wallets
 - **Smart Contract Integration**: Uses the fund contract for efficient token distribution
+- **Handout Kit Export**: Download QR images, a tracking spreadsheet and a printable card sheet as one zip
 <img width="922" height="600" alt="image" src="https://github.com/user-attachments/assets/b10305f5-dbfa-4688-b85c-88a2c378e6a4" />
 
 ### 💸 Recover Funds Tab
@@ -84,7 +84,42 @@ The app is configured for **Gnosis Chain** (Chain ID: 100). Make sure your walle
    - Choose number of wallets to generate
 4. **Generate Codes**: Click "Generate Codes" to create new wallets
 5. **Fund Wallets**: Use the fund contract to distribute tokens
-6. **Export**: Copy codes or generate QR page for printing
+6. **Export**: Copy the codes, or download the handout kit (see below)
+
+### Downloading the Handout Kit
+
+Turns a list of gift codes into everything an event handout needs. Runs entirely in
+the browser — the private keys never leave the page.
+
+1. **Choose a source**: the codes generated in this session, or paste a key list
+2. **Name the batch**: this names both the spreadsheet and the PDF
+3. **Download handout kit**: builds, verifies, then downloads a single `.zip`
+
+The zip contains:
+
+| File | What it is |
+|------|------------|
+| `qr/NN_0xAddress.png` | One QR per key. The payload is the bare private key, so a wallet scanning it imports the key directly. |
+| `<name>.xlsx` | Tracking sheet: index, address, key, the QR embedded in its row, and a `Used` column. |
+| `<name> - printable.pdf` | A4 sheets of cut-apart cards, 20 per page. |
+
+Every QR is decoded back out of all three artifacts before the download is offered.
+If anything mismatches, no kit is produced and the error says what failed.
+
+**Two things worth knowing:**
+
+- **Cards never show the private key as text** — only the index, the QR, and a
+  truncated address, so a stack of cards on a table is not readable over someone's
+  shoulder. The truncated address is what maps a card back to a row in the sheet.
+- **Card `#N` is the sheet row whose `#` column reads `N`.** Numbering always starts
+  at 1.
+
+**Turning the `Used` column into checkboxes** is one action when you open the sheet.
+The file carries boolean values and the app supplies the widget:
+
+- Google Sheets: select the column → Insert → Checkbox
+- Numbers: select the column → Format → Cell → Data Format → Checkbox
+- Excel 365: select the column → Insert → Checkbox
 
 ### Recovering Funds
 
@@ -103,12 +138,14 @@ src/
 │   ├── TabSwitcher.tsx
 │   ├── WalletForm.tsx
 │   ├── RecoveryForm.tsx
-│   └── QRCodeGrid.tsx
+│   ├── QRCodeGrid.tsx
+│   └── GiftKitExport.tsx
 ├── lib/                # Utility functions
 │   ├── walletUtils.ts
 │   ├── gnosisContract.ts
 │   ├── tokenUtils.ts
-│   └── qrUtils.ts
+│   ├── qrUtils.ts
+│   └── giftKit/        # Handout kit: QR PNGs, xlsx, printable PDF, verification
 ├── pages/              # Main page components
 │   ├── GenerateCodes.tsx
 │   └── RecoverFunds.tsx
@@ -125,7 +162,10 @@ src/
 - **RainbowKit**: Wallet connection and UI components
 - **wagmi**: React hooks for Ethereum
 - **ethers.js**: Ethereum library for wallet operations
-- **QRCode**: SVG QR code generation
+- **QRCode**: QR code generation
+- **ExcelJS / pdf-lib / fflate**: Spreadsheet, PDF and zip generation in the browser
+- **zxing-wasm / pdfjs-dist**: Decoding every QR back out to verify the kit
+- **Vitest**: Unit and integration tests (`pnpm test`)
 
 ### Smart Contract Integration
 
@@ -173,12 +213,16 @@ pnpm preview
 
 # Run linting
 pnpm lint
+
+# Run tests
+pnpm test
 ```
 
 ### Code Quality
 
 - **ESLint**: Code linting and formatting
 - **TypeScript**: Strict type checking
+- **Vitest**: Tests live beside the code as `*.test.ts` and are type-checked by `pnpm build`
 - **Prettier**: Code formatting (if configured)
 
 ## 🤝 Contributing
