@@ -55,7 +55,15 @@ async function load() {
  * not make an unannounced third-party request on every export.
  */
 function reader() {
-  if (!ready) ready = load();
+  if (!ready) {
+    // Clear on failure, so a transient fetch error does not poison the tab for
+    // its lifetime -- the only recovery would be a reload, which discards the
+    // generated wallets held in React state.
+    ready = load().catch(err => {
+      ready = null;
+      throw err;
+    });
+  }
   return ready;
 }
 

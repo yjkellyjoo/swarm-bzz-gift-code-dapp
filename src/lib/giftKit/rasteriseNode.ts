@@ -16,20 +16,26 @@ export async function* rasterisePagesNode(
 
   // Same copy-before-transfer rule as the browser path: getDocument puts
   // data.buffer in the transfer list and detaches the caller's array.
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBytes) }).promise;
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(pdfBytes) });
+  const doc = await loadingTask.promise;
 
-  for (let n = 1; n <= doc.numPages; n++) {
-    const page = await doc.getPage(n);
-    const viewport = page.getViewport({ scale: dpi / 72 });
-    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    const ctx = canvas.getContext('2d');
-    await page.render({
-      // @napi-rs/canvas is API-compatible with the browser 2D context.
-      canvas: canvas as unknown as HTMLCanvasElement,
-      canvasContext: ctx as unknown as CanvasRenderingContext2D,
-      viewport,
-    }).promise;
-    const raw = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    yield { data: raw.data, width: raw.width, height: raw.height } as ImageData;
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: dpi / 72 });
+      const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+      const ctx = canvas.getContext('2d');
+      await page.render({
+        // @napi-rs/canvas is API-compatible with the browser 2D context.
+        canvas: canvas as unknown as HTMLCanvasElement,
+        canvasContext: ctx as unknown as CanvasRenderingContext2D,
+        viewport,
+      }).promise;
+      const raw = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      yield { data: raw.data, width: raw.width, height: raw.height } as ImageData;
+      page.cleanup();
+    }
+  } finally {
+    await loadingTask.destroy();
   }
 }

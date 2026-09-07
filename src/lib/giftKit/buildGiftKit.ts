@@ -1,7 +1,7 @@
 import { computeCardLayout } from './layout';
 import { buildItems } from './items';
 import { assessScannability, mmPerModule } from './modulePitch';
-import { pdfName, qrEntryPath, xlsxName } from './naming';
+import { pdfName, qrEntryPath, sanitiseBatchName, xlsxName } from './naming';
 import { buildPdf } from './pdfWrite';
 import { maxQrVersion, renderQr } from './qrPng';
 import type { GiftKitOptions, KitReport, QrArtifact, VerificationProblem } from './types';
@@ -31,8 +31,9 @@ export async function buildGiftKit(
   keys: string[],
   options: InternalOptions,
   onProgress?: (p: BuildProgress) => void,
-): Promise<{ zipBytes: Uint8Array; report: KitReport }> {
+): Promise<{ zipBytes: Uint8Array; report: KitReport; name: string }> {
   const items = buildItems(keys);
+  const name = sanitiseBatchName(options.name);
   const layout = computeCardLayout(COLS, ROWS);
   const version = maxQrVersion(items.map(i => i.privateKey));
 
@@ -47,8 +48,8 @@ export async function buildGiftKit(
     qrs[0] = renderQr(items[items.length - 1].privateKey, version);
   }
 
-  const xlsxBytes = await buildXlsx(items, qrs, options.name);
-  const pdfBytes = await buildPdf(items, qrs, layout, options.name);
+  const xlsxBytes = await buildXlsx(items, qrs, name);
+  const pdfBytes = await buildPdf(items, qrs, layout, name);
 
   // pdf.js needs a real canvas. In the browser that is the DOM; tests inject a
   // node-canvas rasteriser so the PDF pass is exercised there too.
@@ -79,11 +80,11 @@ export async function buildGiftKit(
   }
 
   const entries: Record<string, Uint8Array> = {
-    [xlsxName(options.name)]: xlsxBytes,
-    [pdfName(options.name)]: pdfBytes,
+    [xlsxName(name)]: xlsxBytes,
+    [pdfName(name)]: pdfBytes,
   };
   items.forEach((item, i) => {
-    entries[qrEntryPath(item)] = qrs[i].bytes;
+    entries[qrEntryPath(item, items.length)] = qrs[i].bytes;
   });
 
   const report: KitReport = {
@@ -94,5 +95,5 @@ export async function buildGiftKit(
     mmPerModule: pitch,
   };
 
-  return { zipBytes: packKit(entries), report };
+  return { zipBytes: packKit(entries), report, name };
 }

@@ -24,6 +24,13 @@ export async function verifyKit(args: {
   const total = items.length * 2 + 1;
   let done = 0;
   const tick = () => onProgress?.(++done, total);
+  // wasm decoding is synchronous once the module is cached, so these loops
+  // never reach a macrotask boundary on their own and the browser cannot
+  // repaint the progress it is being told about.
+  const YIELD_EVERY = 20;
+  const breathe = async (i: number) => {
+    if (i % YIELD_EVERY === YIELD_EVERY - 1) await new Promise(r => setTimeout(r, 0));
+  };
 
   for (const [i, item] of items.entries()) {
     const got = await decodeBytes(qrs[i].bytes);
@@ -34,6 +41,7 @@ export async function verifyKit(args: {
       });
     }
     tick();
+    await breathe(i);
   }
 
   const sheet = await readXlsx(xlsxBytes);
@@ -72,6 +80,7 @@ export async function verifyKit(args: {
       }
     }
     tick();
+    await breathe(i);
   }
 
   if (rasterise) {

@@ -17,17 +17,25 @@ export async function* rasterisePages(
   // getDocument puts data.buffer in the worker's transfer list, detaching it.
   // Hand it a copy so the caller's bytes survive to reach the zip -- passing
   // the original leaves a zero-length PDF in the download.
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(pdfBytes) }).promise;
+  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(pdfBytes) });
+  const doc = await loadingTask.promise;
 
-  for (let n = 1; n <= doc.numPages; n++) {
-    const page = await doc.getPage(n);
-    const viewport = page.getViewport({ scale: dpi / 72 });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const ctx = canvas.getContext('2d')!;
-    // pdf.js v6 takes `canvas` as the primary parameter; canvasContext is legacy.
-    await page.render({ canvas, viewport }).promise;
-    yield ctx.getImageData(0, 0, canvas.width, canvas.height);
+  try {
+    for (let n = 1; n <= doc.numPages; n++) {
+      const page = await doc.getPage(n);
+      const viewport = page.getViewport({ scale: dpi / 72 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      const ctx = canvas.getContext('2d')!;
+      // pdf.js v6 takes `canvas` as the primary parameter; canvasContext is legacy.
+      await page.render({ canvas, viewport }).promise;
+      yield ctx.getImageData(0, 0, canvas.width, canvas.height);
+      page.cleanup();
+    }
+  } finally {
+    // Each export otherwise leaves a worker behind; an operator doing several
+    // 300-key batches in one tab accumulates them.
+    await loadingTask.destroy();
   }
 }

@@ -24,6 +24,13 @@ export function buildItems(keys: string[]): GiftKitItem[] {
     const lower = privateKey.toLowerCase();
     if (seen.has(lower)) throw new Error(`key ${i + 1}: duplicate key in batch`);
     seen.add(lower);
-    return { num: i + 1, address: new ethers.Wallet(privateKey).address, privateKey };
+    try {
+      return { num: i + 1, address: new ethers.Wallet(privateKey).address, privateKey };
+    } catch {
+      // Hex-shaped but not a valid secp256k1 key (zero, or above the curve
+      // order). Keep the position, or a 300-line paste gives no clue which
+      // line is bad.
+      throw new Error(`key ${i + 1}: not a valid private key`);
+    }
   });
 }

@@ -52,6 +52,27 @@ describe('buildGiftKit', () => {
     ).rejects.toThrow(/verification/i);
   });
 
+  it('survives a batch name with characters Excel rejects', async () => {
+    // An event organiser typing "ETHRome 2026: batch 1/2" must not abort the
+    // export, and a slash must not nest the zip entries in a phantom folder.
+    const { zipBytes } = await buildGiftKit(keys(2), { name: 'ETHRome 2026: batch 1/2' });
+    const names = Object.keys(unzipSync(zipBytes));
+    expect(names).toContain('ETHRome 2026- batch 1-2.xlsx');
+    expect(names).toContain('ETHRome 2026- batch 1-2 - printable.pdf');
+    expect(names.every(n => !n.includes('/') || n.startsWith('qr/'))).toBe(true);
+  });
+
+  it('returns the sanitised name so the caller can name the download', async () => {
+    const { name } = await buildGiftKit(keys(1), { name: 'Devcon [main]' });
+    expect(name).toBe('Devcon -main-');
+  });
+
+  it('rejects a hex-shaped key that is not a valid secp256k1 key, naming its position', async () => {
+    const good = keys(1)[0];
+    const zero = '0x' + '0'.repeat(64);
+    await expect(buildGiftKit([good, zero], { name: 'Batch A' })).rejects.toThrow(/key 2/);
+  });
+
   it('rejects a duplicate key before building anything', async () => {
     const k = keys(1)[0];
     await expect(buildGiftKit([k, k], { name: 'Batch A' })).rejects.toThrow(/duplicate/i);

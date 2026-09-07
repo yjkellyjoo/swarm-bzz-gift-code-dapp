@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,10 +31,23 @@ function downloadZip(bytes: Uint8Array, filename: string) {
 export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
   const [name, setName] = useState(DEFAULT_NAME);
   const [source, setSource] = useState<Source>(giftCodes.length > 0 ? 'session' : 'paste');
+  const touchedSource = useRef(false);
   const [pasted, setPasted] = useState('');
   const [progress, setProgress] = useState<BuildProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<KitReport | null>(null);
+
+  // This component mounts before any codes are generated, so the initial state
+  // above always picks 'paste'. Switch to the session codes the moment they
+  // appear -- unless the user has already chosen for themselves.
+  useEffect(() => {
+    if (!touchedSource.current && giftCodes.length > 0) setSource('session');
+  }, [giftCodes.length]);
+
+  function chooseSource(next: Source) {
+    touchedSource.current = true;
+    setSource(next);
+  }
 
   const isRunning = progress !== null;
   const keyCount = source === 'session' ? giftCodes.length : 0;
@@ -56,13 +69,14 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
       // pdf-lib, pdfjs-dist and zxing-wasm out of the main bundle.
       const { buildGiftKit } = await import('../lib/giftKit');
 
-      const { zipBytes, report: built } = await buildGiftKit(
+      const { zipBytes, report: built, name: usedName } = await buildGiftKit(
         keys,
         { name: name.trim() || DEFAULT_NAME },
         setProgress,
       );
 
-      downloadZip(zipBytes, `${name.trim() || DEFAULT_NAME}.zip`);
+      // usedName is the sanitised form, so the zip matches the files inside it.
+      downloadZip(zipBytes, `${usedName}.zip`);
       setReport(built);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to build the handout kit');
@@ -93,7 +107,7 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
         <Button
           type="button"
           variant={source === 'session' ? 'default' : 'secondary'}
-          onClick={() => setSource('session')}
+          onClick={() => chooseSource('session')}
           disabled={isRunning || giftCodes.length === 0}
         >
           Codes from this session{giftCodes.length > 0 ? ` (${giftCodes.length})` : ''}
@@ -101,7 +115,7 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
         <Button
           type="button"
           variant={source === 'paste' ? 'default' : 'secondary'}
-          onClick={() => setSource('paste')}
+          onClick={() => chooseSource('paste')}
           disabled={isRunning}
         >
           Paste a key list
