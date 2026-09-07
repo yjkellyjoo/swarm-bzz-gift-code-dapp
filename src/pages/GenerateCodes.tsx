@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { generateWallets } from '../lib/walletUtils';
-import { openQRCodeGrid } from '../lib/qrUtils';
 import { useWalletConnection } from '../hooks/useWalletConnection';
 import { getConnectedWalletSigner } from '../lib/signerUtils';
 import { fundWalletsWithSigner, checkFundingBalanceWithSigner, validateFundParams, checkTokenAllowance } from '../lib/gnosisContract';
 import { QRCodeGrid } from '../components/QRCodeGrid';
+import { GiftKitExport } from '../components/GiftKitExport';
 import { getGlobalRpcUrl } from '../components/WalletBalanceCard';
 import type { GiftCode, WalletFormData } from '../lib/types';
 import {
@@ -530,11 +530,6 @@ export function GenerateCodes() {
     );
   }
 
-  function handleGenerateQRPage() {
-    if (giftCodes.length === 0) return;
-    openQRCodeGrid(giftCodes);
-  }
-
   // Clean up timeout on unmount
   useEffect(() => {
     return () => {
@@ -803,9 +798,6 @@ export function GenerateCodes() {
                 <Button variant="secondary" type="button" onClick={handleCopyCodes}>
                   Copy Codes
                 </Button>
-                <Button variant="default" type="button" onClick={handleGenerateQRPage}>
-                  Generate QR Page
-                </Button>
               </div>
             </div>
 
@@ -842,6 +834,12 @@ export function GenerateCodes() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="mt-8">
+        <CardContent className="p-6">
+          <GiftKitExport giftCodes={giftCodes} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
