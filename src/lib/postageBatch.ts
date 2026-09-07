@@ -361,3 +361,80 @@ export async function createBatchesForWallets(
 
     return results;
 }
+
+// ---------------------------------------------------------------------------
+// Preflight
+// ---------------------------------------------------------------------------
+
+/** One wallet's ability to pay for its own gift drive. */
+export interface WalletAffordability {
+    address: string;
+    privateKey: string;
+    bzzBalance: bigint;
+    nativeBalance: bigint;
+    costPlur: bigint;
+    canAfford: boolean;
+    reason?: string;
+}
+
+/**
+ * Read every wallet's balances before any transaction is sent.
+ *
+ * A pasted list carries no funding history, so this is the only way to tell an
+ * operator a run cannot succeed without charging them gas to find out. The
+ * entry type is structural so this module need not depend on giftDriveList.
+ */
+export async function preflightBatchWallets(
+    entries: Array<{ privateKey: string }>,
+    params: BatchParams,
+    rpcUrl: string
+): Promise<WalletAffordability[]> {
+    const provider = new ethers.JsonRpcProvider(rpcUrl, CONFIG.CHAIN_ID);
+    const bzz = new ethers.Contract(CONFIG.XBZZ_TOKEN_ADDRESS, ERC20_ABI, provider);
+    const costPlur = getBatchCostPlur(params.depth, params.amountPerChunk);
+
+    return Promise.all(
+        entries.map(async entry => {
+            const address = new ethers.Wallet(entry.privateKey).address;
+            const [bzzBalance, nativeBalance] = await Promise.all([
+                bzz.balanceOf(address) as Promise<bigint>,
+                provider.getBalance(address),
+            ]);
+
+            let reason: string | undefined;
+            if (bzzBalance < costPlur) {
+                reason = `holds ${formatBzz(bzzBalance)} xBZZ, needs ${formatBzz(costPlur)} xBZZ`;
+            } else if (nativeBalance === 0n) {
+                reason = 'has no xDAI for gas';
+            }
+
+            return {
+                address,
+                privateKey: entry.privateKey,
+                bzzBalance,
+                nativeBalance,
+                costPlur,
+                canAfford: reason === undefined,
+                reason,
+            };
+        })
+    );
+}
+
+/** Reduce a preflight to what the UI needs to decide whether to offer the run. */
+export function summariseAffordability(rows: WalletAffordability[]): {
+    affordable: number;
+    blocked: number;
+    firstReason?: string;
+} {
+    const blockedRows = rows.filter(row => !row.canAfford);
+    const summary: { affordable: number; blocked: number; firstReason?: string } = {
+        affordable: rows.length - blockedRows.length,
+        blocked: blockedRows.length,
+    };
+
+    const firstReason = blockedRows.find(row => row.reason)?.reason;
+    if (firstReason) summary.firstReason = firstReason;
+
+    return summary;
+}

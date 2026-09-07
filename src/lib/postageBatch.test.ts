@@ -7,9 +7,10 @@ import {
     getBatchTtlSeconds,
     getEffectiveCapacityBytes,
     getTheoreticalCapacityBytes,
+    summariseAffordability,
     validateBatchParams,
 } from './postageBatch';
-import type { BatchParams, ChainBatchLimits } from './postageBatch';
+import type { BatchParams, ChainBatchLimits, WalletAffordability } from './postageBatch';
 import { CONFIG } from '../config';
 
 const limits: ChainBatchLimits = {
@@ -189,5 +190,36 @@ describe('validateBatchParams', () => {
     it('still checks static rules with no chain limits available', () => {
         expect(validateBatchParams(params({ depth: 5 }), null).length).toBeGreaterThan(0);
         expect(validateBatchParams(params({ amountPerChunk: 1n }), null)).toEqual([]);
+    });
+});
+
+describe('summariseAffordability', () => {
+    const row = (over: Partial<WalletAffordability> = {}): WalletAffordability => ({
+        address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+        privateKey: '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d',
+        bzzBalance: 10n ** 16n,
+        nativeBalance: 10n ** 18n,
+        costPlur: 10n ** 14n,
+        canAfford: true,
+        ...over,
+    });
+
+    it('counts an all-clear run', () => {
+        expect(summariseAffordability([row(), row()])).toEqual({ affordable: 2, blocked: 0 });
+    });
+
+    it('counts blocked wallets and surfaces the first reason', () => {
+        const summary = summariseAffordability([
+            row(),
+            row({ canAfford: false, reason: 'holds 0.0 xBZZ, needs 0.01 xBZZ' }),
+        ]);
+
+        expect(summary.affordable).toBe(1);
+        expect(summary.blocked).toBe(1);
+        expect(summary.firstReason).toMatch(/needs 0.01 xBZZ/);
+    });
+
+    it('handles an empty run', () => {
+        expect(summariseAffordability([])).toEqual({ affordable: 0, blocked: 0 });
     });
 });
