@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { downloadBlob } from '../lib/downloadFile';
 import { parseGiftDriveList } from '../lib/giftDriveList';
 import type { GiftDriveEntry } from '../lib/giftDriveList';
 import type { BuildProgress, KitReport } from '../lib/giftKit';
@@ -15,18 +16,6 @@ type Source = 'session' | 'paste';
 
 interface GiftKitExportProps {
   giftCodes: GiftCode[];
-}
-
-function downloadZip(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes as unknown as BlobPart], { type: 'application/zip' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
 }
 
 export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
@@ -117,7 +106,10 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
       );
 
       // usedName is the sanitised form, so the zip matches the files inside it.
-      downloadZip(zipBytes, `${usedName}.zip`);
+      downloadBlob(
+        new Blob([zipBytes as unknown as BlobPart], { type: 'application/zip' }),
+        `${usedName}.zip`,
+      );
       setReport(built);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to build the handout kit');
