@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildKeyList, buildGiftCodeTable } from './giftCodeTable';
+import { buildKeyList, buildGiftCodeTable, GIFT_CODE_TABLE_HEADERS } from './giftCodeTable';
 import { parseGiftDriveList } from './giftDriveList';
 import type { ExportableCode } from './giftCodeTable';
 
@@ -37,7 +37,7 @@ describe('buildGiftCodeTable', () => {
   it('writes a header and one tab-separated row per code', () => {
     expect(buildGiftCodeTable(codes)).toBe(
       [
-        ['privateKey', 'address', 'batchId'].join('\t'),
+        GIFT_CODE_TABLE_HEADERS.join('\t'),
         [KEY_A, ADDRESS_A, BATCH_A].join('\t'),
         [KEY_B, ADDRESS_B, ''].join('\t'),
       ].join('\n'),
@@ -49,7 +49,7 @@ describe('buildGiftCodeTable', () => {
   });
 
   it('handles an empty list, keeping the header', () => {
-    expect(buildGiftCodeTable([])).toBe(['privateKey', 'address', 'batchId'].join('\t'));
+    expect(buildGiftCodeTable([])).toBe(GIFT_CODE_TABLE_HEADERS.join('\t'));
   });
 });
 

@@ -1,9 +1,12 @@
 /**
  * Put a file in front of the user.
  *
- * The object URL is revoked immediately after the click: the blob is already
- * captured by the download, and leaving it alive pins the whole file in memory
- * for the life of the tab - which for a 300-key handout kit is not small.
+ * The object URL is revoked on a delay rather than right after the click:
+ * some browsers resolve the blob URL asynchronously, so revoking it the
+ * moment click() returns can yield a silent no-op or a 0-byte file while the
+ * UI still reports success. A 60 second delay gives the download time to
+ * actually start before the blob is freed, while still not pinning the whole
+ * file in memory for the life of the tab.
  */
 
 export function downloadBlob(blob: Blob, filename: string): void {
@@ -14,7 +17,7 @@ export function downloadBlob(blob: Blob, filename: string): void {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 export function downloadText(

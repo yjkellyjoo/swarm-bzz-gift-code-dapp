@@ -383,8 +383,18 @@ export function GenerateCodes() {
     // Keys only, whether or not drives exist: this file is the plain-text
     // sibling of the key list, and an address column would stop it pasting
     // back. Batch IDs are exported from the gift drives step and the kit.
-    downloadText(buildKeyList(giftCodes), giftCodesFileName(form.batchName));
-    setSuccess(`Downloaded ${giftCodesFileName(form.batchName)}`);
+    const filename = giftCodesFileName(form.batchName);
+    downloadText(buildKeyList(giftCodes), filename);
+
+    // Once drives exist, this keys-only file can no longer reach them - the
+    // batch IDs live only in the gift drives download and the kit. Say so,
+    // or an operator who archives this file and closes the tab loses them.
+    const hasDrives = giftCodes.some(code => code.batchId);
+    setSuccess(
+      hasDrives
+        ? `Downloaded ${filename} (keys only - get batch IDs from the gift drives download below)`
+        : `Downloaded ${filename}`
+    );
   }
 
   // Clean up timeout on unmount
@@ -410,6 +420,10 @@ export function GenerateCodes() {
             type="text"
             value={form.batchName}
             onChange={handleChange}
+            // Batch name is the first field, so Enter here would otherwise
+            // submit the form and silently regenerate (and discard) any
+            // funded-but-unstamped codes.
+            onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
             disabled={isLoading}
             required
           />
