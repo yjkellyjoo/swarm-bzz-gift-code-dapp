@@ -6,6 +6,7 @@ import { buildPdf } from './pdfWrite';
 import { maxQrVersion, renderQr } from './qrPng';
 import type { GiftKitOptions, KitReport, QrArtifact, VerificationProblem } from './types';
 import { verifyKit } from './verify';
+import type { Rasteriser } from './verify';
 import { buildXlsx } from './xlsxWrite';
 import { packKit } from './zip';
 
@@ -22,6 +23,8 @@ export interface BuildProgress {
 interface InternalOptions extends GiftKitOptions {
   /** Test seam: proves the failure path rather than assuming it works. */
   __corruptFirstQr?: boolean;
+  /** Test seam: lets node supply a canvas-backed rasteriser. */
+  __rasterise?: Rasteriser;
 }
 
 export async function buildGiftKit(
@@ -47,9 +50,11 @@ export async function buildGiftKit(
   const xlsxBytes = await buildXlsx(items, qrs, options.name);
   const pdfBytes = await buildPdf(items, qrs, layout, options.name);
 
-  // pdf.js needs a real canvas, so the PDF pass runs in the browser only.
+  // pdf.js needs a real canvas. In the browser that is the DOM; tests inject a
+  // node-canvas rasteriser so the PDF pass is exercised there too.
   const rasterise =
-    typeof window === 'undefined' ? null : (await import('./rasterise')).rasterisePages;
+    options.__rasterise ??
+    (typeof window === 'undefined' ? null : (await import('./rasterise')).rasterisePages);
 
   const problems: VerificationProblem[] = await verifyKit({
     items,

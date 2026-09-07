@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ethers } from 'ethers';
 import { unzipSync } from 'fflate';
 import { buildGiftKit } from './buildGiftKit';
+import { rasterisePagesNode } from './rasteriseNode';
 
 const keys = (n: number) =>
   Array.from({ length: n }, () => ethers.Wallet.createRandom().privateKey);
@@ -55,4 +56,16 @@ describe('buildGiftKit', () => {
     const k = keys(1)[0];
     await expect(buildGiftKit([k, k], { name: 'Batch A' })).rejects.toThrow(/duplicate/i);
   });
+
+  it('builds and fully verifies a kit including the PDF pass', async () => {
+    // The whole pipeline with nothing stubbed out: every QR decoded back from
+    // the PNGs, the sheet, and rendered PDF pages.
+    const { zipBytes, report } = await buildGiftKit(
+      keys(20),
+      { name: 'Batch A', __rasterise: rasterisePagesNode },
+    );
+    expect(report.count).toBe(20);
+    expect(report.pages).toBe(1);
+    expect(Object.keys(unzipSync(zipBytes))).toHaveLength(22); // 20 QRs + xlsx + pdf
+  }, 120_000);
 });
