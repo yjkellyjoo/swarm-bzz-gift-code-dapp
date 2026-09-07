@@ -99,15 +99,22 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
   const isRunning = progress !== null;
 
   useEffect(() => {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    // Guarded to match loadSettings: setItem throws in Safari private mode and
+    // wherever site data is blocked, and an unhandled throw in an effect takes
+    // the step down over a saved preference.
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+      // Settings just will not persist. Not worth interrupting the operator.
+    }
   }, [settings]);
 
   useEffect(() => {
     let cancelled = false;
+    const provider = new ethers.JsonRpcProvider(getGlobalRpcUrl(), CONFIG.CHAIN_ID);
 
     (async () => {
       try {
-        const provider = new ethers.JsonRpcProvider(getGlobalRpcUrl(), CONFIG.CHAIN_ID);
         const read = await readChainBatchLimits(provider);
         if (cancelled) return;
 
@@ -129,6 +136,8 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
 
     return () => {
       cancelled = true;
+      // Otherwise every mount of the step leaves a polling provider behind.
+      provider.destroy();
     };
   }, []);
 
@@ -144,26 +153,47 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
     };
   }, [amountPlur, settings.depth, settings.encrypted, settings.immutable]);
 
-  // Parsing the textarea can throw; the step must still render.
-  const parsed = useMemo<{ entries: GiftDriveEntry[]; error: string | null }>(() => {
+  /**
+   * The wallets this run will act on.
+   *
+   * Codes that already own a drive are excluded from both sources, not merely
+   * carried through: re-running after a partial failure is the natural
+   * recovery move, and without this it buys a second batch for every wallet
+   * that already succeeded - paying twice and orphaning the first. The paste
+   * path needs it most, since pasting the Copy export back is the documented
+   * cross-session recovery and that export carries the batch IDs.
+   *
+   * Parsing can throw on a half-typed list, so the error is carried rather
+   * than raised - the step still has to render.
+   */
+  const parsed = useMemo<{
+    entries: GiftDriveEntry[];
+    skipped: number;
+    error: string | null;
+  }>(() => {
     if (source === 'session') {
-      // Codes that already own a drive are excluded, not just carried through.
-      // Re-running after a partial failure is the natural recovery move, and
-      // without this it buys a second batch for every wallet that succeeded -
-      // paying twice and orphaning the first.
+      const withoutDrive = giftCodes.filter(c => !c.batchId);
       return {
-        entries: giftCodes
-          .filter(c => !c.batchId)
-          .map(c => ({ privateKey: c.privateKey })),
+        entries: withoutDrive.map(c => ({ privateKey: c.privateKey })),
+        skipped: giftCodes.length - withoutDrive.length,
         error: null,
       };
     }
-    if (!pasted.trim()) return { entries: [], error: null };
+
+    if (!pasted.trim()) return { entries: [], skipped: 0, error: null };
+
     try {
-      return { entries: parseGiftDriveList(pasted), error: null };
+      const all = parseGiftDriveList(pasted);
+      const withoutDrive = all.filter(e => !e.batchId);
+      return {
+        entries: withoutDrive,
+        skipped: all.length - withoutDrive.length,
+        error: null,
+      };
     } catch (err) {
       return {
         entries: [],
+        skipped: 0,
         error: err instanceof Error ? err.message : 'Could not read that list',
       };
     }
@@ -234,7 +264,7 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
     setError(null);
     setNotice(null);
     setResults(null);
-    setProgress({ current: 0, total: parsed.entries.length, processing: '' });
+    setProgress({ current: 0, total: parsed.entries.length, processing: 'checking balances' });
 
     try {
       const rpcUrl = getGlobalRpcUrl();
@@ -242,7 +272,12 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
       // Re-read the limits: the price moves, and a stale minimum would only
       // show up as a revert part-way through a paid run.
       const provider = new ethers.JsonRpcProvider(rpcUrl, CONFIG.CHAIN_ID);
-      const read = await readChainBatchLimits(provider);
+      let read: ChainBatchLimits;
+      try {
+        read = await readChainBatchLimits(provider);
+      } finally {
+        provider.destroy();
+      }
       setLimits(read);
 
       const invalid = validateBatchParams(params, read);
@@ -267,6 +302,8 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
           `cannot pay. First problem: ${summary.firstReason}`
         );
       }
+
+      setProgress({ current: 0, total: payable.length, processing: '' });
 
       const created = await createBatchesForWallets(
         payable.map(row => ({ privateKey: row.privateKey, address: row.address })),
@@ -293,14 +330,25 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
     }
   }
 
-  function handleCopyResults() {
+  async function handleCopyResults() {
     if (!results) return;
     const text = [
       ['privateKey', 'address', 'batchId'].join('\t'),
       ...results.map(r => [r.privateKey, r.address, r.batchId ?? ''].join('\t')),
     ].join('\n');
-    navigator.clipboard.writeText(text);
-    setNotice('Gift drives copied to clipboard (private key, address, batch ID)');
+
+    // Awaited, and failure is reported. For a pasted run these batch IDs live
+    // nowhere but this component's state and the next run clears them, so
+    // claiming a copy that did not happen loses paid-for drives.
+    try {
+      await navigator.clipboard.writeText(text);
+      setNotice('Gift drives copied to clipboard (private key, address, batch ID)');
+    } catch {
+      setError(
+        'Could not write to the clipboard. Select the gift drives below and copy them ' +
+        'manually - they are the only record of the batches just bought.'
+      );
+    }
   }
 
   const preflightSummary = preflight ? summariseAffordability(preflight) : null;
@@ -315,6 +363,12 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
         import the key. Run this on codes from this session, or paste a list from an
         earlier one.
       </p>
+      {source === 'session' && parsed.skipped > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {parsed.skipped} of {giftCodes.length} already {parsed.skipped === 1 ? 'has' : 'have'} a
+          gift drive and will be skipped, so none is paid for twice.
+        </p>
+      )}
 
       <div className="flex gap-2">
         <Button
@@ -347,9 +401,12 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
             disabled={isRunning}
           />
           {parsed.error && <p className="text-sm text-red-700">{parsed.error}</p>}
-          {!parsed.error && parsed.entries.length > 0 && (
+          {!parsed.error && (parsed.entries.length > 0 || parsed.skipped > 0) && (
             <p className="text-sm text-muted-foreground">
-              {parsed.entries.length} key{parsed.entries.length === 1 ? '' : 's'} read
+              {parsed.entries.length} key{parsed.entries.length === 1 ? '' : 's'} to stamp
+              {parsed.skipped > 0
+                ? `, ${parsed.skipped} skipped because they already have a gift drive`
+                : ''}
             </p>
           )}
         </div>

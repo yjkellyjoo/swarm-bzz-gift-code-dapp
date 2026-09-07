@@ -159,6 +159,22 @@ export function GenerateCodes() {
       if (form.walletCount < 1) throw new Error('Must generate at least 1 wallet');
       if (form.xdaiAmount < 0.01) throw new Error('xDAI amount must be at least 0.01');
 
+      // Generating replaces the whole list. Codes that already own a gift
+      // drive were paid for with real xBZZ, and once their keys are gone the
+      // batches cannot be reached again.
+      const withDrives = giftCodes.filter(code => code.batchId).length;
+      if (withDrives > 0) {
+        const proceed = window.confirm(
+          `${withDrives} gift ${withDrives === 1 ? 'drive was' : 'drives were'} bought with ` +
+          `real xBZZ and will be lost - the batches stay on-chain but nothing will be able ` +
+          `to reach them. Copy the codes first if you need them.\n\nGenerate anyway?`
+        );
+        if (!proceed) {
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Check balance BEFORE generating wallets
       const signer = await getConnectedWalletSigner();
       if (!signer) {
@@ -325,7 +341,7 @@ export function GenerateCodes() {
     );
   }
 
-  function handleCopyCodes() {
+  async function handleCopyCodes() {
     if (giftCodes.length === 0) return;
 
     // Once gift drives exist a bare key list would lose the batch ID, so
@@ -342,12 +358,20 @@ export function GenerateCodes() {
         ].join('\n')
       : giftCodes.map(code => code.privateKey).join('\n');
 
-    navigator.clipboard.writeText(codesText);
-    setSuccess(
-      hasDrives
-        ? 'Gift codes copied to clipboard (private key, address, batch ID)'
-        : 'Gift codes copied to clipboard'
-    );
+    // Awaited so a rejected write is not reported as a success. With gift
+    // drives in the list this text is the only record of batches bought with
+    // real xBZZ, and the write rejects in an insecure context or when the
+    // document is not focused.
+    try {
+      await navigator.clipboard.writeText(codesText);
+      setSuccess(
+        hasDrives
+          ? 'Gift codes copied to clipboard (private key, address, batch ID)'
+          : 'Gift codes copied to clipboard'
+      );
+    } catch {
+      setError('Could not write to the clipboard. Copy the codes from the list below.');
+    }
   }
 
   // Clean up timeout on unmount

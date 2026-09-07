@@ -27,6 +27,17 @@ const MAX_UTILIZATION = 0.9;
 /** Wallets read per round in the preflight, to stay under RPC rate limits. */
 const PREFLIGHT_CHUNK_SIZE = 20;
 
+/**
+ * Gas the two transactions actually use, with headroom.
+ *
+ * An ERC-20 approve is around 46k and createBatch around 150k. Neither call
+ * sets a gas limit - ethers estimates - so budgeting CONFIG.GAS_LIMIT for each
+ * would overstate the requirement several times over and report wallets as
+ * unable to pay when they can.
+ */
+const APPROVE_GAS = 60_000n;
+const CREATE_BATCH_GAS = 220_000n;
+
 export interface BatchParams {
     depth: number;
     /** Per-chunk amount in PLUR. */
@@ -442,7 +453,7 @@ export async function preflightBatchWallets(
         const feeData = await provider.getFeeData();
         const pricePerGas =
             feeData.maxFeePerGas ?? feeData.gasPrice ?? BigInt(CONFIG.GAS_PRICE);
-        const gasNeeded = pricePerGas * BigInt(CONFIG.GAS_LIMIT) * 2n;
+        const gasNeeded = pricePerGas * (APPROVE_GAS + CREATE_BATCH_GAS);
 
         const rows: WalletAffordability[] = [];
 
@@ -452,9 +463,23 @@ export async function preflightBatchWallets(
         for (let i = 0; i < entries.length; i += PREFLIGHT_CHUNK_SIZE) {
             const chunk = entries.slice(i, i + PREFLIGHT_CHUNK_SIZE);
 
+            // Addresses are derived up front, outside the settled handling:
+            // deriving one is itself a thing that can throw, so doing it in the
+            // rejection branch could throw out of forEach and discard the whole
+            // preflight - the opposite of what that branch is for.
+            const addresses = chunk.map(entry => {
+                try {
+                    return new ethers.Wallet(entry.privateKey).address;
+                } catch {
+                    return null;
+                }
+            });
+
             const settled = await Promise.allSettled(
-                chunk.map(async entry => {
-                    const address = new ethers.Wallet(entry.privateKey).address;
+                chunk.map(async (_entry, j) => {
+                    const address = addresses[j];
+                    if (address === null) throw new Error('not a usable private key');
+
                     const [bzzBalance, nativeBalance] = await Promise.all([
                         bzz.balanceOf(address) as Promise<bigint>,
                         provider.getBalance(address),
@@ -470,13 +495,16 @@ export async function preflightBatchWallets(
                 // whole preflight.
                 if (outcome.status === 'rejected') {
                     rows.push({
-                        address: new ethers.Wallet(entry.privateKey).address,
+                        address: addresses[j] ?? '(unreadable key)',
                         privateKey: entry.privateKey,
                         bzzBalance: 0n,
                         nativeBalance: 0n,
                         costPlur,
                         canAfford: false,
-                        reason: 'could not be read from the chain',
+                        reason:
+                            addresses[j] === null
+                                ? 'is not a usable private key'
+                                : 'could not be read from the chain',
                     });
                     return;
                 }

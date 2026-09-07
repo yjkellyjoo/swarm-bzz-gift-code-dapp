@@ -1,3 +1,4 @@
+import { ethers } from 'ethers';
 import { decodeGiftPayload } from './giftPayload';
 
 /**
@@ -58,26 +59,32 @@ export function parseGiftDriveList(input: string): GiftDriveEntry[] {
         // The Copy Codes export header.
         if (line.toLowerCase().startsWith('privatekey')) return;
 
-        // A tab-delimited row is privateKey/address/batchId. Only the first
-        // field is a key; the batch ID must never be treated as one.
-        if (line.includes('\t')) {
-            const [key, , batchId] = line.split('\t');
-            const decoded = decodeGiftPayload(key.trim());
+        // A row from the Copy export is privateKey/address/batchId, and only
+        // its first field is a key - the batch ID must never be read as one.
+        //
+        // Recognised by the address in field 2, not by the tabs alone: a
+        // column of keys copied out of a spreadsheet is also tab-separated,
+        // and treating that as an export row would silently keep only the
+        // first key and drop the rest.
+        const fields = line.split('\t').map(f => f.trim());
+        if (fields.length >= 2 && ethers.isAddress(fields[1])) {
+            const decoded = decodeGiftPayload(fields[0]);
 
             if (!decoded) {
-                invalid.push(`${label}: ${key.trim().substring(0, 12)}...`);
+                invalid.push(`${label}: ${fields[0].substring(0, 12)}...`);
                 return;
             }
 
             const entry: GiftDriveEntry = { privateKey: decoded.privateKey };
-            const trimmedBatch = (batchId ?? '').trim();
-            if (BATCH_ID_RE.test(trimmedBatch)) entry.batchId = trimmedBatch;
+            const batchId = fields[2] ?? '';
+            if (BATCH_ID_RE.test(batchId)) entry.batchId = batchId;
             entries.push(entry);
             return;
         }
 
+        // Otherwise tabs are just separators, like commas.
         line
-            .split(',')
+            .split(/[,\t]/)
             .map(token => token.trim())
             .filter(token => token.length > 0)
             .forEach(token => add(token, label));

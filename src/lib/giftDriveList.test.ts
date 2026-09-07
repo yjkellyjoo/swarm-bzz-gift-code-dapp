@@ -74,6 +74,27 @@ describe('parseGiftDriveList', () => {
         expect(() => parseGiftDriveList(`${KEY_A}\nnonsense`)).toThrow(/Invalid private keys/);
     });
 
+    // A column of keys copied out of a spreadsheet is tab-separated too.
+    // Reading that as an export row would keep only the first key and drop the
+    // rest silently - in Recover Funds, that leaves wallets undrained with
+    // nothing to say so.
+    it('treats tabs as separators when the row is not an export row', () => {
+        expect(parseGiftDriveList([KEY_A, KEY_B].join('\t'))).toEqual([
+            { privateKey: KEY_A },
+            { privateKey: KEY_B },
+        ]);
+    });
+
+    it('still reads an export row, recognised by the address in field 2', () => {
+        expect(parseGiftDriveList([KEY_A, ADDRESS_A, BATCH_A].join('\t'))).toEqual([
+            { privateKey: KEY_A, batchId: BATCH_A },
+        ]);
+    });
+
+    it('rejects a tab row of junk rather than silently keeping field 1', () => {
+        expect(() => parseGiftDriveList(`${KEY_A}\tnonsense`)).toThrow(/Invalid private keys/);
+    });
+
     it('preserves input order', () => {
         expect(parseGiftDriveList(`${KEY_B}\n${KEY_A}`).map(e => e.privateKey)).toEqual([
             KEY_B,

@@ -55,13 +55,19 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
   // The message is kept rather than swallowed - the export button is disabled
   // when nothing parsed, so without showing why, a bad key would just grey the
   // button out with no explanation anywhere.
-  const parsedPaste = useMemo<{ count: number; error: string | null }>(() => {
-    if (!pasted.trim()) return { count: 0, error: null };
+  const parsedPaste = useMemo<{ count: number; drives: number; error: string | null }>(() => {
+    if (!pasted.trim()) return { count: 0, drives: 0, error: null };
     try {
-      return { count: parseGiftDriveList(pasted).length, error: null };
+      const entries = parseGiftDriveList(pasted);
+      return {
+        count: entries.length,
+        drives: entries.filter(e => e.batchId).length,
+        error: null,
+      };
     } catch (err) {
       return {
         count: 0,
+        drives: 0,
         error: err instanceof Error ? err.message : 'Could not read that list',
       };
     }
@@ -69,8 +75,10 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
 
   const pastedCount = parsedPaste.count;
   const keyCount = source === 'session' ? giftCodes.length : pastedCount;
+  // Counted for the pasted source too: confirming the drives were picked up is
+  // the whole reason to paste the export rather than a plain key list.
   const driveCount =
-    source === 'session' ? giftCodes.filter(c => c.batchId).length : 0;
+    source === 'session' ? giftCodes.filter(c => c.batchId).length : parsedPaste.drives;
 
   async function handleExport() {
     setError(null);
