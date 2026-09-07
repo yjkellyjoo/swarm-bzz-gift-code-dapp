@@ -8,7 +8,9 @@ import { GiftDriveStep } from '../components/GiftDriveStep';
 import { GiftKitExport } from '../components/GiftKitExport';
 import type { BatchParams, BatchResult } from '../lib/postageBatch';
 import type { GiftCode, WalletFormData } from '../lib/types';
-import { DEFAULT_BATCH_NAME } from '../lib/batchName';
+import { DEFAULT_BATCH_NAME, giftCodesFileName } from '../lib/batchName';
+import { buildGiftCodeTable, buildKeyList } from '../lib/giftCodeTable';
+import { downloadText } from '../lib/downloadFile';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -356,13 +358,8 @@ export function GenerateCodes() {
     const hasDrives = giftCodes.some(code => code.batchId);
 
     const codesText = hasDrives
-      ? [
-          ['privateKey', 'address', 'batchId'].join('\t'),
-          ...giftCodes.map(code =>
-            [code.privateKey, code.address, code.batchId ?? ''].join('\t')
-          ),
-        ].join('\n')
-      : giftCodes.map(code => code.privateKey).join('\n');
+      ? buildGiftCodeTable(giftCodes)
+      : buildKeyList(giftCodes);
 
     // Awaited so a rejected write is not reported as a success. With gift
     // drives in the list this text is the only record of batches bought with
@@ -378,6 +375,16 @@ export function GenerateCodes() {
     } catch {
       setError('Could not write to the clipboard. Copy the codes from the list below.');
     }
+  }
+
+  function handleDownloadCodes() {
+    if (giftCodes.length === 0) return;
+
+    // Keys only, whether or not drives exist: this file is the plain-text
+    // sibling of the key list, and an address column would stop it pasting
+    // back. Batch IDs are exported from the gift drives step and the kit.
+    downloadText(buildKeyList(giftCodes), giftCodesFileName(form.batchName));
+    setSuccess(`Downloaded ${giftCodesFileName(form.batchName)}`);
   }
 
   // Clean up timeout on unmount
@@ -525,6 +532,9 @@ export function GenerateCodes() {
                 </Button>
                 <Button variant="secondary" type="button" onClick={handleCopyCodes}>
                   Copy Codes
+                </Button>
+                <Button variant="secondary" type="button" onClick={handleDownloadCodes}>
+                  Download codes
                 </Button>
               </div>
             </div>
