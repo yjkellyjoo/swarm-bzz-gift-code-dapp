@@ -1,5 +1,6 @@
 import { computeCardLayout } from './layout';
 import { buildItems } from './items';
+import { itemPayload } from './payload';
 import { assessScannability, mmPerModule } from './modulePitch';
 import { pdfName, qrEntryPath, sanitiseBatchName, xlsxName } from './naming';
 import { buildPdf } from './pdfWrite';
@@ -32,20 +33,20 @@ export async function buildGiftKit(
   options: InternalOptions,
   onProgress?: (p: BuildProgress) => void,
 ): Promise<{ zipBytes: Uint8Array; report: KitReport; name: string }> {
-  const items = buildItems(keys);
+  const items = buildItems(keys, options.driveByKey);
   const name = sanitiseBatchName(options.name);
   const layout = computeCardLayout(COLS, ROWS);
-  const version = maxQrVersion(items.map(i => i.privateKey));
+  const version = maxQrVersion(items.map(itemPayload));
 
   const qrs: QrArtifact[] = [];
   for (const [i, item] of items.entries()) {
-    qrs.push(renderQr(item.privateKey, version));
+    qrs.push(renderQr(itemPayload(item), version));
     onProgress?.({ phase: 'build', done: i + 1, total: items.length });
     // Yield so a 300-key batch does not freeze the tab.
     if (i % YIELD_EVERY === YIELD_EVERY - 1) await new Promise(r => setTimeout(r, 0));
   }
   if (options.__corruptFirstQr) {
-    qrs[0] = renderQr(items[items.length - 1].privateKey, version);
+    qrs[0] = renderQr(itemPayload(items[items.length - 1]), version);
   }
 
   const xlsxBytes = await buildXlsx(items, qrs, name);
