@@ -696,7 +696,7 @@ Settings move with it, into their own `localStorage` key. That is what lets `Wal
 **Interfaces:**
 - Consumes: `parseGiftDriveList` / `GiftDriveEntry` (Task 2); `preflightBatchWallets`, `summariseAffordability`, `WalletAffordability` (Task 4); and the existing `createBatchesForWallets`, `readChainBatchLimits`, `validateBatchParams`, `getBatchCostPlur`, `getBatchTtlSeconds`, `getEffectiveCapacityBytes`, `formatBytes`, `formatBzz`, `formatTtl`, `BatchParams`, `BatchProgress`, `BatchResult`, `ChainBatchLimits` from `src/lib/postageBatch.ts`.
 - Produces: `GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveStepProps)`, where
-  `interface GiftDriveStepProps { giftCodes: GiftCode[]; onSessionDrivesCreated: (results: BatchResult[]) => void }`.
+  `interface GiftDriveStepProps { giftCodes: GiftCode[]; onSessionDrivesCreated: (results: BatchResult[], params: BatchParams) => void }`. The params come along because the QR grid displays depth/encryption/immutability; they are deliberately not in the QR payload.
 
 - [ ] **Step 1: Shrink `WalletFormData` back to the funding fields**
 
@@ -764,7 +764,7 @@ interface GiftDriveSettings {
 
 interface GiftDriveStepProps {
   giftCodes: GiftCode[];
-  onSessionDrivesCreated: (results: BatchResult[]) => void;
+  onSessionDrivesCreated: (results: BatchResult[], params: BatchParams) => void;
 }
 
 function defaultSettings(): GiftDriveSettings {
@@ -1641,7 +1641,8 @@ Append to `src/lib/giftKit/xlsx.test.ts`, following its existing `buildXlsx` + `
   it('records the gift drive, and leaves it blank without one', async () => {
     const drives = new Map([[KEY_A.toLowerCase(), BATCH_A]]);
     const items = buildItems([KEY_A, KEY_B], drives);
-    const qrs = items.map(i => renderQr(itemPayload(i), maxQrVersion(items.map(itemPayload))));
+    const version = maxQrVersion(items.map(itemPayload));
+    const qrs = items.map(i => renderQr(itemPayload(i), version));
 
     const sheet = await readXlsx(await buildXlsx(items, qrs, 'Drives'));
 
