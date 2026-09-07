@@ -27,6 +27,7 @@ export async function readXlsx(bytes: Uint8Array) {
       address: row.getCell(2).value,
       privateKey: row.getCell(3).value,
       used: row.getCell(5).value,
+      batchId: row.getCell(6).value,
     });
   }
 

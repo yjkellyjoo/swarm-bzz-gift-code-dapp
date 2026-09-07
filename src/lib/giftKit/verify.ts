@@ -65,6 +65,13 @@ export async function verifyKit(args: {
     if (values?.address !== item.address || values?.privateKey !== item.privateKey) {
       problems.push({ where: `xlsx row ${row}`, detail: 'address/key mismatch' });
     }
+    // An empty cell reads back as null or '', so compare normalised: the
+    // absence of a gift drive and a blank cell are the same thing.
+    const expectedDrive = item.batchId ?? '';
+    const gotDrive = values?.batchId == null ? '' : String(values.batchId);
+    if (gotDrive !== expectedDrive) {
+      problems.push({ where: `xlsx row ${row}`, detail: 'gift drive mismatch' });
+    }
     if (values?.used !== false) {
       problems.push({
         where: `xlsx row ${row}`,
