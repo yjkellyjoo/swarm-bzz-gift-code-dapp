@@ -76,14 +76,19 @@ describe('parsePrivateKeys', () => {
         expect(parsePrivateKeys(`${KEY_A}\n${KEY_B}\n`)).toEqual([KEY_A, KEY_B]);
     });
 
-    it('deduplicates a wallet listed twice, so it is not drained twice', () => {
+    // Deliberately not de-duplicated. giftKit/items.ts rejects duplicates,
+    // because two cards carrying one key means one gift handed out twice and
+    // another not at all. Silently dropping the repeat here would suppress
+    // that error and hand over one card fewer than asked for.
+    it('does not deduplicate - giftKit rejects duplicates by design', () => {
         const payload = encodeGiftPayload({
             privateKey: KEY_A,
             address: ADDRESS_A,
             batchId: BATCH_A,
         });
 
-        expect(parsePrivateKeys(`${KEY_A}\n${payload}`)).toEqual([KEY_A]);
+        expect(parsePrivateKeys(`${KEY_A}\n${payload}`)).toEqual([KEY_A, KEY_A]);
+        expect(parsePrivateKeys(`${KEY_A}\n${KEY_A}`)).toEqual([KEY_A, KEY_A]);
     });
 
     // A batch ID is 32 bytes of hex, which is indistinguishable from a private

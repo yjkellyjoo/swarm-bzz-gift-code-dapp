@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import { CONFIG, ERC20_ABI } from '../config';
-import { decodeGiftPayload, isValidPrivateKey } from './giftPayload';
+import { isValidPrivateKey } from './giftPayload';
+import { parseGiftDriveList } from './giftDriveList';
 
 export { isValidPrivateKey };
 
@@ -62,78 +63,14 @@ export function importWallet(privateKey: string): WalletInfo {
 /**
  * Parse private keys from text input.
  *
- * Accepts bare keys separated by commas, tabs or newlines, and also the
- * structured payload a gift QR carries once the wallet has a postage batch.
+ * Accepts every shape parseGiftDriveList does, discarding any batch IDs.
+ * Callers that need the batch IDs should use parseGiftDriveList directly.
  *
- * Structured payloads have to be handled per line rather than split on commas,
- * because the payload is JSON and contains commas of its own. Extracting the
- * key from it also matters for safety: a batch ID is a 32-byte hex string, so
- * a naive split would happily treat it as a second private key and try to
- * drain a wallet that does not exist.
- *
- * The header row emitted by the Copy Codes export is skipped, so exported
- * codes can be pasted straight back in.
+ * Does not de-duplicate: giftKit/items.ts rejects duplicates by design,
+ * because two cards carrying the same key means one gift handed out twice.
  */
 export function parsePrivateKeys(input: string): string[] {
-    if (!input.trim()) {
-        return [];
-    }
-
-    const validKeys: string[] = [];
-    const invalidKeys: string[] = [];
-    const seen = new Set<string>();
-
-    const addToken = (token: string, label: string) => {
-        const decoded = decodeGiftPayload(token);
-        if (!decoded) {
-            invalidKeys.push(`${label}: ${token.substring(0, 12)}...`);
-            return;
-        }
-
-        // Guard against the same wallet being listed twice, which would
-        // otherwise be drained twice.
-        const dedupeKey = decoded.privateKey.toLowerCase();
-        if (seen.has(dedupeKey)) return;
-
-        seen.add(dedupeKey);
-        validKeys.push(decoded.privateKey);
-    };
-
-    const lines = input.split('\n').map(line => line.trim()).filter(line => line.length > 0);
-
-    lines.forEach((line, lineIndex) => {
-        // A structured payload is one whole line - do not split it.
-        if (line.startsWith('{')) {
-            addToken(line, `Line ${lineIndex + 1}`);
-            return;
-        }
-
-        // Skip the Copy Codes export header.
-        if (line.toLowerCase().startsWith('privatekey')) {
-            return;
-        }
-
-        // Tab-delimited means a row from the Copy Codes export, whose columns
-        // are privateKey/address/batchId. Only the first field is a key; the
-        // others must not be mistaken for one.
-        if (line.includes('\t')) {
-            const [first] = line.split('\t');
-            addToken(first.trim(), `Line ${lineIndex + 1}`);
-            return;
-        }
-
-        line
-            .split(',')
-            .map(token => token.trim())
-            .filter(token => token.length > 0)
-            .forEach(token => addToken(token, `Line ${lineIndex + 1}`));
-    });
-
-    if (invalidKeys.length > 0) {
-        throw new Error(`Invalid private keys found:\n${invalidKeys.join('\n')}`);
-    }
-
-    return validKeys;
+    return parseGiftDriveList(input).map(entry => entry.privateKey);
 }
 
 /**
