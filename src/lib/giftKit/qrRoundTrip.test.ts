@@ -31,3 +31,25 @@ describe('QR round-trip', () => {
     expect(decoded).not.toEqual([keys[1]]);
   });
 });
+
+describe('false-positive barcodes', () => {
+  // Roughly one QR in 8000 contains a run of modules that zxing also reads as a
+  // valid ITF 1D barcode. Left unrestricted the decoder returns two symbols and
+  // the verifier rejects a perfectly good kit -- a false failure, which is worse
+  // than no check, since the usual cure is to weaken the check.
+  //
+  // These are throwaway keys, never funded, found by sweeping random keys for
+  // the QRCode+ITF case. All three produce it at version 5.
+  const ITF_TRIGGERS = [
+    '0xef71ed05ad9d7d2c6ba61a76ca3def033f2a0061809e3e7d05fae0a9cd186639',
+    '0x117aeaeec11a91969fb7a2895112963ef83725d95f3189a8abc1be34a2f44200',
+    '0xe04d8545ef0e4d2e1b20d3aeee6360dbdf6d339c2dfe9187328079fe5a114c2e',
+  ];
+
+  it.each(ITF_TRIGGERS)(
+    'reports only the QR, never a 1D barcode read out of its modules (%s)',
+    async key => {
+      expect(await decodeBytes(renderQr(key, 5).bytes)).toEqual([key]);
+    },
+  );
+});

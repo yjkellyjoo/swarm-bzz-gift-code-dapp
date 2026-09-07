@@ -1,7 +1,22 @@
+import type { ReaderOptions } from 'zxing-wasm/reader';
 import type { DecodedMark } from './types';
 
-// textMode 'Plain' so a hex string can never be reinterpreted as structured content.
-const READER_OPTS = { textMode: 'Plain', maxNumberOfSymbols: 64 } as const;
+// formats is the load-bearing option: left unrestricted, zxing hunts for 1D
+// barcodes too and roughly one QR in 8000 contains a run of modules it reads as
+// a valid ITF code. That phantom second symbol made the verifier reject a
+// perfectly good kit -- a false failure, which is worse than no check at all,
+// since the cure is usually to weaken the check. We only ever generate QR
+// codes, so only QR codes are looked for.
+//
+// textMode 'Plain' so a hex string can never be reinterpreted as structured
+// content.
+const QR_ONLY: ReaderOptions = { textMode: 'Plain', formats: ['QRCode'] };
+
+/** A single PNG holds exactly one QR; stop after it. */
+const SINGLE_OPTS: ReaderOptions = { ...QR_ONLY, maxNumberOfSymbols: 1 };
+
+/** A printed page holds a full grid of them. */
+const PAGE_OPTS: ReaderOptions = { ...QR_ONLY, maxNumberOfSymbols: 64 };
 
 let ready: Promise<typeof import('zxing-wasm/reader')> | null = null;
 
@@ -47,14 +62,14 @@ function reader() {
 /** Decode raw image bytes -- a PNG file, not pixels. */
 export async function decodeBytes(image: Uint8Array): Promise<string[]> {
   const zx = await reader();
-  const results = await zx.readBarcodes(image, READER_OPTS);
+  const results = await zx.readBarcodes(image, SINGLE_OPTS);
   return results.map(r => r.text);
 }
 
 /** Decode rasterised pixels, keeping each mark's position for card ordering. */
 export async function decodeImageData(image: ImageData): Promise<DecodedMark[]> {
   const zx = await reader();
-  const results = await zx.readBarcodes(image, READER_OPTS);
+  const results = await zx.readBarcodes(image, PAGE_OPTS);
   return results.map(r => {
     const corners = [
       r.position.topLeft,
