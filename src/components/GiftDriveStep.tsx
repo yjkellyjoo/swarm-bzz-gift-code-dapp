@@ -9,6 +9,9 @@ import { CONFIG } from '../config';
 import { getGlobalRpcUrl } from './WalletBalanceCard';
 import { parseGiftDriveList } from '../lib/giftDriveList';
 import type { GiftDriveEntry } from '../lib/giftDriveList';
+import { buildGiftCodeTable } from '../lib/giftCodeTable';
+import { giftDrivesFileName } from '../lib/batchName';
+import { downloadText } from '../lib/downloadFile';
 import {
   createBatchesForWallets,
   formatBytes,
@@ -44,6 +47,7 @@ interface GiftDriveSettings {
 
 interface GiftDriveStepProps {
   giftCodes: GiftCode[];
+  batchName: string;
   onSessionDrivesCreated: (results: BatchResult[], params: BatchParams) => void;
 }
 
@@ -84,7 +88,7 @@ function parseAmount(value: string): bigint | null {
   return BigInt(trimmed);
 }
 
-export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveStepProps) {
+export function GiftDriveStep({ giftCodes, batchName, onSessionDrivesCreated }: GiftDriveStepProps) {
   const [settings, setSettings] = useState<GiftDriveSettings>(loadSettings);
   const [source, setSource] = useState<Source>(giftCodes.length > 0 ? 'session' : 'paste');
   const [pasted, setPasted] = useState('');
@@ -332,10 +336,7 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
 
   async function handleCopyResults() {
     if (!results) return;
-    const text = [
-      ['privateKey', 'address', 'batchId'].join('\t'),
-      ...results.map(r => [r.privateKey, r.address, r.batchId ?? ''].join('\t')),
-    ].join('\n');
+    const text = buildGiftCodeTable(results);
 
     // Awaited, and failure is reported. For a pasted run these batch IDs live
     // nowhere but this component's state and the next run clears them, so
@@ -349,6 +350,19 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
         'manually - they are the only record of the batches just bought.'
       );
     }
+  }
+
+  function handleDownloadResults() {
+    if (!results) return;
+
+    // TSV, matching the copy button: the batch id is the point of this step,
+    // and parseGiftDriveList reads this shape back into either paste box.
+    downloadText(
+      buildGiftCodeTable(results),
+      giftDrivesFileName(batchName),
+      'text/tab-separated-values;charset=utf-8',
+    );
+    setNotice(`Downloaded ${giftDrivesFileName(batchName)}`);
   }
 
   const preflightSummary = preflight ? summariseAffordability(preflight) : null;
@@ -576,9 +590,14 @@ export function GiftDriveStep({ giftCodes, onSessionDrivesCreated }: GiftDriveSt
             <div className="font-medium">
               {createdCount} gift drive{createdCount === 1 ? '' : 's'} created
             </div>
-            <Button type="button" variant="secondary" onClick={handleCopyResults}>
-              Copy gift drives
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={handleCopyResults}>
+                Copy gift drives
+              </Button>
+              <Button type="button" variant="secondary" onClick={handleDownloadResults}>
+                Download gift drives
+              </Button>
+            </div>
           </div>
           <div className="divide-y rounded border border-slate-200">
             {/* Index in the key: a pasted list may repeat a wallet, since

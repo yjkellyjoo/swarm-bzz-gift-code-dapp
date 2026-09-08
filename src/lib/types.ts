@@ -15,6 +15,8 @@ export interface WalletFormData {
   xdaiAmount: number;
   xbzzAmount: number;
   walletCount: number;
+  /** Names every file the app writes: both downloads and the handout kit. */
+  batchName: string;
 }
 
 /**

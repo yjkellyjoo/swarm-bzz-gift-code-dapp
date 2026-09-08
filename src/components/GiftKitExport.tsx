@@ -1,36 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { DEFAULT_BATCH_NAME } from '../lib/batchName';
+import { downloadBlob } from '../lib/downloadFile';
 import { parseGiftDriveList } from '../lib/giftDriveList';
 import type { GiftDriveEntry } from '../lib/giftDriveList';
 import type { BuildProgress, KitReport } from '../lib/giftKit';
 import type { GiftCode } from '../lib/types';
 
-const DEFAULT_NAME = 'Swarm BZZ Gift Codes';
-
 type Source = 'session' | 'paste';
 
 interface GiftKitExportProps {
   giftCodes: GiftCode[];
+  batchName: string;
 }
 
-function downloadZip(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes as unknown as BlobPart], { type: 'application/zip' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
-  const [name, setName] = useState(DEFAULT_NAME);
+export function GiftKitExport({ giftCodes, batchName }: GiftKitExportProps) {
   const [source, setSource] = useState<Source>(giftCodes.length > 0 ? 'session' : 'paste');
   const touchedSource = useRef(false);
   const [pasted, setPasted] = useState('');
@@ -112,12 +99,15 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
 
       const { zipBytes, report: built, name: usedName } = await buildGiftKit(
         keys,
-        { name: name.trim() || DEFAULT_NAME, driveByKey },
+        { name: batchName.trim() || DEFAULT_BATCH_NAME, driveByKey },
         setProgress,
       );
 
       // usedName is the sanitised form, so the zip matches the files inside it.
-      downloadZip(zipBytes, `${usedName}.zip`);
+      downloadBlob(
+        new Blob([zipBytes as unknown as BlobPart], { type: 'application/zip' }),
+        `${usedName}.zip`,
+      );
       setReport(built);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to build the handout kit');
@@ -141,16 +131,6 @@ export function GiftKitExport({ giftCodes }: GiftKitExportProps) {
           ? ` ${driveCount} of ${keyCount} selected code${keyCount === 1 ? '' : 's'} ${driveCount === 1 ? 'has' : 'have'} a gift drive.`
           : ''}
       </p>
-
-      <div className="space-y-2">
-        <Label htmlFor="kitName">Batch name</Label>
-        <Input
-          id="kitName"
-          value={name}
-          onChange={e => setName(e.target.value)}
-          disabled={isRunning}
-        />
-      </div>
 
       <div className="flex gap-2">
         <Button
