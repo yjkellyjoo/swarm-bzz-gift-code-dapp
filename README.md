@@ -1,12 +1,14 @@
 # 🎁 Swarm BZZ Gift Code Dapp
 
-A React + TypeScript application for generating and managing [Swarm](https://www.ethswarm.org/) [BZZ](https://www.ethswarm.org/get-bzz) gift wallets on Gnosis Chain. Built with Vite, RainbowKit, and ethers.js.
+A React + TypeScript application for generating and managing [Swarm](https://www.ethswarm.org/) [BZZ](https://www.ethswarm.org/get-bzz) gift wallets on Gnosis Chain.
+Built with Vite, RainbowKit, and ethers.js.
 
 ## ✨ Features
 
 ### 🎁 Generate Codes Tab
 
-Three steps, run in order or independently. Each of the last two takes either the codes from this session or a key list you paste in, so you can come back to codes generated weeks ago.
+Three steps, run in order or independently.
+Each of the last two takes either the codes from this session or a key list you paste in, so you can come back to codes generated weeks ago.
 
 **1. Generate gift codes**
 - **Wallet Generation**: Create multiple new wallets with private keys
@@ -83,7 +85,8 @@ Every address and default lives in `src/config.ts`:
 The RPC URL is the one value you can change at runtime, from the input at the top of the page.
 
 ### Chain Configuration
-The app is configured for **Gnosis Chain** (Chain ID: 100). Make sure your wallet is connected to the correct network.
+The app is configured for **Gnosis Chain** (Chain ID: 100).
+Make sure your wallet is connected to the correct network.
 
 ## 📖 Usage Guide
 
@@ -130,17 +133,23 @@ Run it on this session's codes, or paste a key list from an earlier one.
 
 Some things worth knowing:
 
-- **Codes that already have a drive are skipped.** Re-running after a partial failure is the normal recovery move, and buying a second batch for a wallet that already has one would pay twice and orphan the first.
-- **A failed wallet does not stop the run.** It is reported against its own code and the rest continue.
-- **The contract's minimum amount tracks the storage price**, so a saved or default value can fall below it. The form reads the live minimum and raises a stale value rather than leaving settings that can only fail.
-- **Erasure coding is fixed at none.** The encryption toggle only sizes the capacity estimate; it is not a batch property on-chain.
+- **Codes that already have a drive are skipped.**
+  Re-running after a partial failure is the normal recovery move, and buying a second batch for a wallet that already has one would pay twice and orphan the first.
+- **A failed wallet does not stop the run.**
+  It is reported against its own code and the rest continue.
+- **The contract's minimum amount tracks the storage price**, so a saved or default value can fall below it.
+  The form reads the live minimum and raises a stale value rather than leaving settings that can only fail.
+- **Erasure coding is fixed at none.**
+  The encryption toggle only sizes the capacity estimate; it is not a batch property on-chain.
 
-⚠️ **This spends real xBZZ on Gnosis mainnet.** There is no testnet path. Test with a single wallet at the minimum depth and amount before a real run.
+⚠️ **This spends real xBZZ on Gnosis mainnet.**
+There is no testnet path.
+Test with a single wallet at the minimum depth and amount before a real run.
 
 ### Downloading the Handout Kit
 
-Turns a list of gift codes into everything an event handout needs. Runs entirely in
-the browser — the private keys never leave the page.
+Turns a list of gift codes into everything an event handout needs.
+Runs entirely in the browser — the private keys never leave the page.
 
 1. **Choose a source**: the codes generated in this session, or paste a key list
 2. **Download handout kit**: builds, verifies, then downloads a single `.zip`
@@ -172,11 +181,10 @@ If anything mismatches, no kit is produced and the error says what failed.
 
 **Two things worth knowing:**
 
-- **Cards never show the private key as text** — only the index, the QR, and a
-  truncated address, so a stack of cards on a table is not readable over someone's
-  shoulder. The truncated address is what maps a card back to a row in the sheet.
-- **Card `#N` is the sheet row whose `#` column reads `N`.** Numbering always starts
-  at 1.
+- **Cards never show the private key as text** — only the index, the QR, and a truncated address, so a stack of cards on a table is not readable over someone's shoulder.
+  The truncated address is what maps a card back to a row in the sheet.
+- **Card `#N` is the sheet row whose `#` column reads `N`.**
+  Numbering always starts at 1.
 
 **Turning the `Used` column into checkboxes** is one action when you open the sheet.
 The file carries boolean values and the app supplies the widget:
@@ -271,7 +279,8 @@ The batch ID is read from the `BatchCreated` event.
 
 ## 🔒 Security Features
 
-- **Keys never leave the browser**: Generation, stamping and every export happen in the page. Nothing is sent off-origin and no key is logged.
+- **Keys never leave the browser**: Generation, stamping and every export happen in the page.
+  Nothing is sent off-origin and no key is logged.
 - **Private Key Validation**: All private keys are validated before processing
 - **Gas Estimation**: Automatic gas estimation for transactions
 - **Error Handling**: Comprehensive error handling and user feedback
@@ -279,11 +288,13 @@ The batch ID is read from the `BatchCreated` event.
 - **Balance Checks**: Verify sufficient balance before funding operations
 - **Keys are never printed as text on a card**: They travel only inside the QR, so a stack of cards is not readable over someone's shoulder
 
-**Where the keys end up.** The copy buttons put keys on the clipboard and the download buttons write them to your Downloads folder.
+**Where the keys end up.**
+The copy buttons put keys on the clipboard and the download buttons write them to your Downloads folder.
 Both are intended, but a file persists in a way a clipboard does not — and once gift drives exist, those exports are the only record of batches bought with real xBZZ.
 Losing the keys makes the batches unreachable.
 
-**One caveat on batch IDs.** A batch ID is 32 bytes of hex, which is also a valid private key, so nothing can tell them apart by validation alone.
+**One caveat on batch IDs.**
+A batch ID is 32 bytes of hex, which is also a valid private key, so nothing can tell them apart by validation alone.
 Column position is what keeps them straight: exports put the key first and the batch ID third, and the parser recognises that layout by the address in between.
 
 ## 🎨 UI/UX Features
@@ -337,7 +348,8 @@ This project is licensed under the MIT License.
 
 ## ⚠️ Disclaimer
 
-This application deals with private keys and cryptocurrency transactions. Users are responsible for:
+This application deals with private keys and cryptocurrency transactions.
+Users are responsible for:
 
 - Securing their private keys
 - Verifying transaction details
