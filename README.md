@@ -26,8 +26,6 @@ Each of the last two takes either the codes from this session or a key list you 
 **2. Download the handout kit**
 - **Handout Kit Export**: QR images, a tracking spreadsheet and a printable card sheet as one zip
 
-<img width="640" alt="Generate Codes tab mid-event: batch name and generate form, six generated codes (four with gift drives), the Gift drives step and the Handout kit step" src="docs/images/generate-tab.png" />
-
 ### 💸 Recover Funds Tab
 
 - **Bulk Recovery**: Recover funds from multiple gift wallets at once
@@ -35,7 +33,6 @@ Each of the last two takes either the codes from this session or a key list you 
 - **Automatic Transfers**: Transfer all xDAI and xBZZ to connected wallet
 - **Transaction Tracking**: View transaction hashes and block explorer links
 - **Error Handling**: Comprehensive error reporting for failed recoveries
-<img width="934" height="567" alt="image" src="https://github.com/user-attachments/assets/1e738a07-169f-41db-b750-168ce65aad10" />
 
 ## 🚀 Quick Start
 
@@ -104,6 +101,8 @@ Make sure your wallet is connected to the correct network.
 5. **Fund Wallets**: Use the fund contract to distribute tokens
 6. **Export**: Copy the codes, or **Download codes** for a `.txt` of one key per line
 
+<img width="560" alt="Generate form with a batch name, and the top of the generated codes list with the Fund Wallets, Copy Codes and Download codes buttons" src="docs/images/generate-codes.png" />
+
 ### The batch name
 
 One input at the top of the form names all five files:
@@ -130,6 +129,8 @@ Run it on this session's codes, or paste a key list from an earlier one.
 3. **Check wallets** — reads every wallet's xBZZ and gas before anything is spent, and reports which cannot pay
 4. **Create gift drives** — two transactions per wallet: approve, then `createBatch`
 5. **Export** — copy or download key/address/batch ID as a `.tsv`
+
+<img width="560" alt="Gift drives step on six session codes, four of which already have a drive: depth, amount per chunk, the cost readout and Create 2 gift drives" src="docs/images/gift-drives.png" />
 
 Some things worth knowing:
 
@@ -204,6 +205,8 @@ The file carries boolean values and the app supplies the widget:
 3. **Recover Funds**: Click "Recover Funds" to transfer all tokens
 4. **Monitor Progress**: View transaction status and results
 5. **Check Results**: Review recovered amounts and transaction hashes
+
+<img width="560" alt="Recover Funds tab with six gift codes pasted, one per line" src="docs/images/recover-funds.png" />
 
 ## 🏗️ Architecture
 
