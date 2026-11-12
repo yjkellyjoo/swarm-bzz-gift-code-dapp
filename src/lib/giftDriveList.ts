@@ -1,5 +1,6 @@
 import { ethers } from 'ethers';
 import { decodeGiftPayload } from './giftPayload';
+import { GIFT_CODE_TABLE_HEADERS } from './giftCodeTable';
 
 /**
  * The one parser for every list an operator can paste.
@@ -57,7 +58,7 @@ export function parseGiftDriveList(input: string): GiftDriveEntry[] {
         }
 
         // The Copy Codes export header.
-        if (line.toLowerCase().startsWith('privatekey')) return;
+        if (line.toLowerCase().startsWith(GIFT_CODE_TABLE_HEADERS[0].toLowerCase())) return;
 
         // A row from the Copy export is privateKey/address/batchId, and only
         // its first field is a key - the batch ID must never be read as one.
