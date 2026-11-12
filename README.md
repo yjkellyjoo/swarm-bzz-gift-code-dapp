@@ -26,7 +26,7 @@ Each of the last two takes either the codes from this session or a key list you 
 **2. Download the handout kit**
 - **Handout Kit Export**: QR images, a tracking spreadsheet and a printable card sheet as one zip
 
-<img width="922" height="600" alt="image" src="https://github.com/user-attachments/assets/b10305f5-dbfa-4688-b85c-88a2c378e6a4" />
+<img width="640" alt="Generate Codes tab mid-event: batch name and generate form, six generated codes (four with gift drives), the Gift drives step and the Handout kit step" src="docs/images/generate-tab.png" />
 
 ### 💸 Recover Funds Tab
 
@@ -156,6 +156,8 @@ Runs entirely in the browser — the private keys never leave the page.
 
 Paste the gift drives export rather than a plain key list and the drives come through too.
 
+<img width="560" alt="Handout kit step after a verified build of six codes, four of them with gift drives" src="docs/images/handout-kit.png" />
+
 The zip contains:
 
 | File | What it is |
@@ -163,6 +165,8 @@ The zip contains:
 | `qr/NN_0xAddress.png` | One QR per key. See the payload note below. |
 | `<name>.xlsx` | Tracking sheet: index, address, key, the QR embedded in its row, a `Used` column, and a `Gift drive` column holding the batch ID. |
 | `<name> - printable.pdf` | A4 sheets of cut-apart cards, 20 per page. |
+
+<img width="640" alt="Top of the first printable page: numbered cut-apart cards, each with a QR and a truncated address" src="docs/images/handout-kit-cards.png" />
 
 **The QR payload depends on whether the code has a gift drive.**
 
